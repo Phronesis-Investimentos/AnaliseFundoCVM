@@ -148,6 +148,21 @@ def carregar_historico_fundo(
     return df.sort_values("DT_COMPTC").reset_index(drop=True)
 
 
+def filtrar_periodo(
+    df: pd.DataFrame,
+    data_inicial: str,
+    data_final: str
+) -> pd.DataFrame:
+
+    inicio = pd.to_datetime(data_inicial)
+    fim = pd.to_datetime(data_final) + pd.offsets.MonthEnd(0)
+
+    return df[
+        (df["DT_COMPTC"] >= inicio) &
+        (df["DT_COMPTC"] <= fim)
+    ]
+
+
 def calcular_variacao_periodo(df: pd.DataFrame) -> float:
 
     if df.empty:
@@ -167,7 +182,5 @@ def calcular_variacao_periodo(df: pd.DataFrame) -> float:
           .last()
           .iloc[-1]["VL_QUOTA"]
     )
-
-    print("Cota inicial:", cota_inicial, "| Cota final:", cota_final)
 
     return ((cota_final / cota_inicial) - 1) * 100

@@ -100,6 +100,70 @@ Analisar
 </div>
 
 
+<!-- Card de comparação entre múltiplos fundos e múltiplos períodos -->
+
+<div class="card">
+
+<h1>
+📊 Comparar Fundos e Períodos
+</h1>
+
+<p class="subtitle">
+Adicione quantos fundos e períodos quiser para comparar a rentabilidade lado a lado
+</p>
+
+<label>
+Fundo
+</label>
+
+<input
+id="cmp_fundo_busca"
+placeholder="Digite o nome do fundo..."
+autocomplete="off"
+>
+
+<div id="cmp_sugestoes"></div>
+
+<div id="cmp_fundosSelecionados"></div>
+
+<h2 class="periodo-personalizado-titulo">
+Adicionar Período
+</h2>
+
+<div class="periodo-form">
+
+<div class="form-group">
+    <label>Rótulo (opcional)</label>
+    <input id="cmp_periodo_label" placeholder="Ex: Jan a Mar 2025">
+</div>
+
+<div class="form-group">
+    <label>Data Inicial</label>
+    <input type="month" id="cmp_periodo_data_inicial">
+</div>
+
+<div class="form-group">
+    <label>Data Final</label>
+    <input type="month" id="cmp_periodo_data_final">
+</div>
+
+<button onclick="adicionarPeriodoComparar()">
+Adicionar
+</button>
+
+</div>
+
+<div id="cmp_periodosSelecionados"></div>
+
+<button onclick="compararFundos()">
+Comparar
+</button>
+
+<div id="cmp_resultado"></div>
+
+</div>
+
+
 </div>
 
 

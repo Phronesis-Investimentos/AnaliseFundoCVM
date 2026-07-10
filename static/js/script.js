@@ -2,6 +2,10 @@ console.log("script.js carregado");
 
 let fundosSelecionados = [];
 
+// fundos e períodos escolhidos na tela de comparação
+let cmpFundos = [];
+let cmpPeriodos = [];
+
 
 document.addEventListener(
     "DOMContentLoaded",
@@ -337,6 +341,12 @@ function configurarLimitesMeses(){
         campoDataFinal.max = limite;
     }
 
+    const campoPeriodoCompararFinal = document.getElementById("cmp_periodo_data_final");
+
+    if(campoPeriodoCompararFinal){
+        campoPeriodoCompararFinal.max = limite;
+    }
+
 }
 
 
@@ -477,5 +487,324 @@ async function consultar() {
 
     }
 
+
+}
+
+
+/* ---------- Comparação de múltiplos fundos e múltiplos períodos ---------- */
+
+
+const campoFundoComparar =
+document.getElementById("cmp_fundo_busca");
+
+
+if(campoFundoComparar){
+
+    campoFundoComparar.addEventListener(
+        "input",
+        buscarFundosComparar
+    );
+
+}
+
+
+// fecha as sugestões da comparação se o usuário clicar fora
+document.addEventListener("click", function(evento){
+
+    if(!campoFundoComparar){
+        return;
+    }
+
+    const divSugestoes = document.getElementById("cmp_sugestoes");
+
+    const dentroDoCampo =
+        campoFundoComparar.contains(evento.target);
+
+    const dentroDasSugestoes =
+        divSugestoes.contains(evento.target);
+
+    if(!dentroDoCampo && !dentroDasSugestoes){
+        divSugestoes.innerHTML = "";
+    }
+
+});
+
+
+async function buscarFundosComparar(){
+
+    const termo = campoFundoComparar.value.trim();
+
+    if(termo.length < 3){
+        document.getElementById("cmp_sugestoes").innerHTML = "";
+        return;
+    }
+
+    try {
+
+        const resposta = await fetch(
+            `/api/fundos/buscar?busca=${encodeURIComponent(termo)}`
+        );
+
+        if(!resposta.ok){
+            console.error("Erro na busca de fundos:", resposta.status);
+            return;
+        }
+
+        const fundos = await resposta.json();
+
+        mostrarSugestoesComparar(fundos);
+
+    } catch (erro) {
+
+        console.error("Erro ao buscar fundos:", erro);
+
+    }
+
+}
+
+
+function mostrarSugestoesComparar(fundos){
+
+    const div = document.getElementById("cmp_sugestoes");
+
+    div.innerHTML = "";
+
+    if(fundos.length === 0){
+
+        const vazio = document.createElement("div");
+
+        vazio.className = "sugestao sugestao-vazia";
+
+        vazio.textContent = "Nenhum fundo encontrado";
+
+        div.appendChild(vazio);
+
+        return;
+
+    }
+
+    fundos.forEach(fundo => {
+
+        const item = document.createElement("div");
+
+        item.className = "sugestao";
+
+        item.textContent = fundo.DENOM_SOCIAL;
+
+        item.onclick = function(){
+
+            const jaAdicionado = cmpFundos.some(
+                f => f.cnpj === fundo.CNPJ_FUNDO
+            );
+
+            if(jaAdicionado){
+
+                alert("Esse fundo já foi adicionado");
+
+            } else {
+
+                cmpFundos.push({
+                    cnpj: fundo.CNPJ_FUNDO,
+                    nome: fundo.DENOM_SOCIAL
+                });
+
+                mostrarFundosComparar();
+
+            }
+
+            campoFundoComparar.value = "";
+
+            div.innerHTML = "";
+
+        };
+
+        div.appendChild(item);
+
+    });
+
+}
+
+
+function mostrarFundosComparar(){
+
+    const div = document.getElementById("cmp_fundosSelecionados");
+
+    div.innerHTML = "";
+
+    cmpFundos.forEach((fundo, index) => {
+
+        div.innerHTML += `
+        <div class="result-card">
+            ${fundo.nome}
+            <button onclick="removerFundoComparar(${index})">X</button>
+        </div>
+        `;
+
+    });
+
+}
+
+
+function removerFundoComparar(index){
+
+    cmpFundos.splice(index, 1);
+
+    mostrarFundosComparar();
+
+}
+
+
+function adicionarPeriodoComparar(){
+
+    const label = document.getElementById("cmp_periodo_label").value.trim();
+
+    const data_inicial = document.getElementById("cmp_periodo_data_inicial").value;
+
+    const data_final = document.getElementById("cmp_periodo_data_final").value;
+
+    if(!data_inicial || !data_final){
+        alert("Preencha data inicial e data final do período");
+        return;
+    }
+
+    if(data_inicial > data_final){
+        alert("A data inicial não pode ser depois da data final");
+        return;
+    }
+
+    const { ano, mes } = obterUltimoMesCompleto();
+    const limite = formatarAnoMes(ano, mes);
+
+    if(data_final > limite){
+        alert(`Só é possível consultar até ${limite} (último mês fechado)`);
+        return;
+    }
+
+    cmpPeriodos.push({
+        data_inicial: data_inicial,
+        data_final: data_final,
+        label: label || `${data_inicial} até ${data_final}`
+    });
+
+    document.getElementById("cmp_periodo_label").value = "";
+    document.getElementById("cmp_periodo_data_inicial").value = "";
+    document.getElementById("cmp_periodo_data_final").value = "";
+
+    mostrarPeriodosComparar();
+
+}
+
+
+function mostrarPeriodosComparar(){
+
+    const div = document.getElementById("cmp_periodosSelecionados");
+
+    div.innerHTML = "";
+
+    cmpPeriodos.forEach((periodo, index) => {
+
+        div.innerHTML += `
+        <div class="result-card">
+            ${periodo.label}
+            <button onclick="removerPeriodoComparar(${index})">X</button>
+        </div>
+        `;
+
+    });
+
+}
+
+
+function removerPeriodoComparar(index){
+
+    cmpPeriodos.splice(index, 1);
+
+    mostrarPeriodosComparar();
+
+}
+
+
+async function compararFundos(){
+
+    if(cmpFundos.length === 0){
+        alert("Adicione ao menos um fundo");
+        return;
+    }
+
+    if(cmpPeriodos.length === 0){
+        alert("Adicione ao menos um período");
+        return;
+    }
+
+    const divResultado = document.getElementById("cmp_resultado");
+
+    divResultado.innerHTML = `<p>Calculando... isso pode levar alguns minutos na primeira consulta, pois os dados são baixados diretamente da CVM.</p>`;
+
+    try {
+
+        const resposta = await fetch("/api/fundos/comparar", {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                fundos: cmpFundos,
+                periodos: cmpPeriodos
+            })
+
+        });
+
+        const dados = await resposta.json();
+
+        if(dados.erro){
+            divResultado.innerHTML = `<p>${dados.erro}</p>`;
+            return;
+        }
+
+        let cabecalho = "<th>Fundo</th>";
+
+        cmpPeriodos.forEach(periodo => {
+            cabecalho += `<th>${periodo.label}</th>`;
+        });
+
+        let linhas = "";
+
+        dados.fundos.forEach(fundo => {
+
+            let celulas = `<td>${fundo.nome}</td>`;
+
+            fundo.variacoes.forEach(variacao => {
+
+                const classe = variacao.variacao_percentual >= 0 ? "positive" : "negative";
+
+                celulas += `<td class="${classe}">${variacao.variacao_percentual}%</td>`;
+
+            });
+
+            linhas += `<tr>${celulas}</tr>`;
+
+        });
+
+        divResultado.innerHTML = `
+        <table>
+            <thead>
+                <tr>${cabecalho}</tr>
+            </thead>
+            <tbody>
+                ${linhas}
+            </tbody>
+        </table>
+        `;
+
+    } catch (erro) {
+
+        console.error(erro);
+
+        divResultado.innerHTML = `<p>Erro ao comunicar com o servidor.</p>`;
+
+    }
 
 }
