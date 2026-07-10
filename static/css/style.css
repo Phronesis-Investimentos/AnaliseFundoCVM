@@ -1,0 +1,491 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+
+body {
+
+    font-family: "Inter", Arial, Helvetica, sans-serif;
+
+    background: #f5f7fb;
+
+    color: #333;
+
+}
+
+
+.container {
+
+    width: 90%;
+
+    max-width: 900px;
+
+    margin: 40px auto;
+
+}
+
+
+.card {
+
+    background: white;
+
+    border-radius: 15px;
+
+    padding: 35px;
+
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+
+}
+
+
+.card + .card {
+
+    margin-top: 30px;
+
+}
+
+
+h1 {
+
+    font-size: 28px;
+
+    color: #1f2937;
+
+    margin-bottom: 10px;
+
+}
+
+
+.subtitle {
+
+    color: #6b7280;
+
+    margin-bottom: 30px;
+
+}
+
+
+.form-group {
+
+    margin-bottom: 20px;
+
+}
+
+
+label {
+
+    display: block;
+
+    font-size: 14px;
+
+    font-weight: 600;
+
+    margin-bottom: 8px;
+
+    color: #374151;
+
+}
+
+
+input {
+
+    width: 100%;
+
+    height: 45px;
+
+    padding: 0 15px;
+
+    border-radius: 8px;
+
+    border: 1px solid #d1d5db;
+
+    font-size: 15px;
+
+    transition: 0.2s;
+
+}
+
+
+input:focus {
+
+    outline: none;
+
+    border-color: #16a34a;
+
+    box-shadow: 0 0 0 3px rgba(22,163,74,0.15);
+
+}
+
+
+button {
+
+    width: 100%;
+
+    height: 45px;
+
+    border: none;
+
+    border-radius: 8px;
+
+    background: #16a34a;
+
+    color: white;
+
+    font-size: 16px;
+
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition: 0.3s;
+
+}
+
+
+button:hover {
+
+    background: #15803d;
+
+}
+
+
+#resultado {
+
+    margin-top: 30px;
+
+}
+
+
+.result-card {
+
+    background: white;
+
+    border-radius: 15px;
+
+    padding: 25px;
+
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+
+}
+
+
+.result-card h2 {
+
+    margin-bottom: 20px;
+
+    color: #111827;
+
+}
+
+
+.info {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    padding: 12px 0;
+
+    border-bottom: 1px solid #eee;
+
+}
+
+
+.info:last-child {
+
+    border-bottom: none;
+
+}
+
+
+.label {
+
+    color: #6b7280;
+
+}
+
+
+.value {
+
+    font-weight: 700;
+
+}
+
+
+.positive {
+
+    color: #16a34a;
+
+}
+
+
+.negative {
+
+    color: #dc2626;
+
+}
+
+
+#sugestoes {
+
+    position: relative;
+
+    z-index: 10;
+
+    margin-bottom: 20px;
+
+}
+
+
+.sugestao {
+
+    background:white;
+
+    padding:12px;
+
+    border:1px solid #ddd;
+
+    border-top: none;
+
+    cursor:pointer;
+
+}
+
+
+.sugestao:hover {
+
+    background:#f0fdf4;
+
+}
+
+
+.sugestao-vazia {
+
+    cursor: default;
+
+    color: #9ca3af;
+
+}
+
+
+.sugestao-vazia:hover {
+
+    background: white;
+
+}
+
+
+/* Formulário de períodos */
+
+.periodo-form {
+
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 15px;
+
+    align-items: flex-end;
+
+    margin-bottom: 20px;
+
+}
+
+
+.periodo-form .form-group {
+
+    flex: 1;
+
+    min-width: 140px;
+
+    margin-bottom: 0;
+
+}
+
+
+.periodo-form button {
+
+    width: auto;
+
+    padding: 0 20px;
+
+    white-space: nowrap;
+
+}
+
+
+/* Presets de retorno padrão */
+
+.presets-periodo {
+
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 15px;
+
+    margin-bottom: 25px;
+
+}
+
+
+.preset-item {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    background: #f9fafb;
+
+    border: 1px solid #e5e7eb;
+
+    border-radius: 8px;
+
+    padding: 10px 14px;
+
+}
+
+
+.preset-item label {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    margin-bottom: 0;
+
+    font-weight: 600;
+
+    font-size: 14px;
+
+    white-space: nowrap;
+
+}
+
+
+.preset-item input[type="checkbox"] {
+
+    width: auto;
+
+    height: auto;
+
+}
+
+
+.preset-item input[type="number"] {
+
+    width: 70px;
+
+    height: 32px;
+
+    padding: 0 8px;
+
+    font-size: 13px;
+
+}
+
+
+.periodo-personalizado-titulo {
+
+    font-size: 16px;
+
+    color: #374151;
+
+    margin-bottom: 15px;
+
+}
+
+
+/* Lista de períodos adicionados */
+
+#periodoPersonalizadoSelecionado .result-card,
+#periodosSelecionados .result-card {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    padding: 15px 20px;
+
+    margin-bottom: 12px;
+
+    font-size: 14px;
+
+}
+
+
+#periodoPersonalizadoSelecionado .result-card button,
+#periodosSelecionados .result-card button {
+
+    width: auto;
+
+    height: 28px;
+
+    padding: 0 10px;
+
+    font-size: 12px;
+
+    background: #dc2626;
+
+}
+
+
+#periodoPersonalizadoSelecionado .result-card button:hover,
+#periodosSelecionados .result-card button:hover {
+
+    background: #b91c1c;
+
+}
+
+
+/* Tabela de resultado da nota */
+
+#resultadoNota table {
+
+    width: 100%;
+
+    border-collapse: collapse;
+
+    margin-top: 15px;
+
+}
+
+
+#resultadoNota th,
+#resultadoNota td {
+
+    text-align: left;
+
+    padding: 10px 12px;
+
+    border-bottom: 1px solid #eee;
+
+    font-size: 14px;
+
+}
+
+
+#resultadoNota th {
+
+    color: #6b7280;
+
+    font-weight: 600;
+
+}
+
+
+#resultadoNota h2 {
+
+    color: #111827;
+
+    margin-bottom: 5px;
+
+}

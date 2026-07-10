@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>Análise de Fundos</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+
+<div class="card">
+
+<h1>
+📈 Análise de Fundo
+</h1>
+
+
+<p class="subtitle">
+Consulte a rentabilidade histórica de fundos CVM
+</p>
+
+
+<!-- Busca do fundo -->
+
+<label>
+Fundo
+</label>
+
+<input 
+id="fundo_busca"
+placeholder="Digite o nome do fundo..."
+autocomplete="off"
+>
+
+
+<div id="sugestoes"></div>
+
+
+<input 
+type="hidden"
+id="cnpj"
+>
+
+
+
+<!-- Datas -->
+
+<div class="form-group">
+
+<label>
+Data Inicial
+</label>
+
+<input 
+type="month"
+id="data_inicial"
+>
+
+</div>
+
+
+
+<div class="form-group">
+
+<label>
+Data Final
+</label>
+
+<input 
+type="month"
+id="data_final"
+>
+
+</div>
+
+<!-- Botões -->
+
+
+<button onclick="consultar()">
+Analisar
+</button>
+
+
+
+<div id="resultado">
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+
+</body>
+
+</html>
