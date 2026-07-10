@@ -1,810 +1,296 @@
-console.log("script.js carregado");
-
-let fundosSelecionados = [];
-
-// fundos e períodos escolhidos na tela de comparação
-let cmpFundos = [];
-let cmpPeriodos = [];
-
-
-document.addEventListener(
-    "DOMContentLoaded",
-    () => {
-        carregarFundos();
-        configurarLimitesMeses();
-    }
-);
-
-
-const campoFundo =
-document.getElementById("fundo_busca");
-
-
-campoFundo.addEventListener(
-    "input",
-    buscarFundos
-);
-
-
-// fecha as sugestões se o usuário clicar fora
-document.addEventListener("click", function(evento){
-
-    const dentroDoCampo =
-        campoFundo.contains(evento.target);
-
-    const dentroDasSugestoes =
-        document.getElementById("sugestoes").contains(evento.target);
-
-    if(!dentroDoCampo && !dentroDasSugestoes){
-        document.getElementById("sugestoes").innerHTML = "";
-    }
-
-});
-
-
-async function buscarFundos(){
-
-    const termo =
-    campoFundo.value.trim();
-
-
-    if(termo.length < 3){
-
-        document.getElementById(
-            "sugestoes"
-        ).innerHTML = "";
-
-        return;
-
-    }
-
-    // se o usuário digitar de novo, o CNPJ escolhido antes fica inválido
-    document.getElementById("cnpj").value = "";
-
-
-    try {
-
-        const resposta = await fetch(
-            `/api/fundos/buscar?busca=${encodeURIComponent(termo)}`
-        );
-
-        if(!resposta.ok){
-            console.error("Erro na busca de fundos:", resposta.status);
-            return;
-        }
-
-        const fundos =
-        await resposta.json();
-
-        mostrarSugestoes(fundos);
-
-    } catch (erro) {
-
-        console.error("Erro ao buscar fundos:", erro);
-
-    }
-
-}
-
-
-function mostrarSugestoes(fundos){
-
-
-    const div =
-    document.getElementById(
-        "sugestoes"
-    );
-
-
-    div.innerHTML = "";
-
-
-    if(fundos.length === 0){
-
-        const vazio = document.createElement("div");
-
-        vazio.className = "sugestao sugestao-vazia";
-
-        vazio.textContent = "Nenhum fundo encontrado";
-
-        div.appendChild(vazio);
-
-        return;
-
-    }
-
-
-    fundos.forEach(fundo => {
-
-
-        const item =
-        document.createElement(
-            "div"
-        );
-
-
-        item.className =
-        "sugestao";
-
-
-        item.textContent =
-        fundo.DENOM_SOCIAL;
-
-
-
-        item.onclick = function(){
-
-
-            document.getElementById(
-                "fundo_busca"
-            ).value =
-            fundo.DENOM_SOCIAL;
-
-
-
-            document.getElementById(
-                "cnpj"
-            ).value =
-            fundo.CNPJ_FUNDO;
-
-
-
-            div.innerHTML = "";
-
-
-
-            console.log(
-                "CNPJ selecionado:",
-                fundo.CNPJ_FUNDO
-            );
-
+document.addEventListener("DOMContentLoaded", () => {
+    
+    // ==========================================
+    // 1. EFEITOS DE UI/UX (Magnet e Tilt)
+    // ==========================================
+
+    // Botões Magnéticos
+    const magneticButtons = document.querySelectorAll('.magnetic-btn');
+    magneticButtons.forEach(btn => {
+        btn.addEventListener('mousemove', (e) => {
+            const rect = btn.getBoundingClientRect();
+            const x = e.clientX - rect.left - rect.width / 2;
+            const y = e.clientY - rect.top - rect.height / 2;
+            // Atração magnética
+            btn.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px)`;
+        });
+        btn.addEventListener('mouseleave', () => {
+            btn.style.transform = `translate(0px, 0px)`;
+        });
+    });
+
+    // Cartões 3D (Tilt Card)
+    const tiltCards = document.querySelectorAll('.tilt-card');
+    tiltCards.forEach(card => {
+        card.addEventListener('mousemove', (e) => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            
+            // Calcula a rotação
+            const rotateX = ((y - centerY) / centerY) * -5; // máx 5 graus
+            const rotateY = ((x - centerX) / centerX) * 5;  // máx 5 graus
+            
+            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.01, 1.01, 1.01)`;
+        });
+        
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
+        });
+    });
+
+    // ==========================================
+    // 2. UTILITÁRIOS
+    // ==========================================
+
+    // Loader Global
+    const loader = document.getElementById('global_loader');
+    const showLoader = () => loader.classList.add('loader-visible');
+    const hideLoader = () => loader.classList.remove('loader-visible');
+
+    // Formatação de cor baseada na rentabilidade
+    const formatValue = (val) => {
+        if (val > 0) return `<span class="text-[#00ff88]">+${val}%</span>`;
+        if (val < 0) return `<span class="text-[#ff3366]">${val}%</span>`;
+        return `<span class="text-gray-400">0.00%</span>`;
+    };
+
+    // Debounce function
+    function debounce(func, timeout = 300){
+        let timer;
+        return (...args) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => { func.apply(this, args); }, timeout);
         };
-
-
-
-        div.appendChild(item);
-
-
-    });
-
-
-}
-
-
-async function carregarFundos(){
-
-
-    const resposta = await fetch(
-        "/api/fundos"
-    );
-
-
-    const fundos = await resposta.json();
-
-
-    const select =
-    document.getElementById("fundo");
-
-
-    if(!select){
-        return;
     }
 
-
-    fundos.forEach(fundo => {
-
-
-        const opcao =
-        document.createElement("option");
-
-
-        opcao.value =
-        fundo.CNPJ_FUNDO;
-
-
-        opcao.textContent =
-        fundo.DENOM_SOCIAL;
-
-
-        select.appendChild(opcao);
-
-
-    });
-
-
-}
-
-function adicionarFundo(){
-
-
-    const cnpj =
-    document.getElementById("cnpj").value;
-
-
-    const nome =
-    document.getElementById("fundo_busca").value;
-
-
-
-    if(!cnpj){
-
-        alert(
-            "Selecione um fundo"
-        );
-
-        return;
-
-    }
-
-
-
-    fundosSelecionados.push({
-
-        cnpj:cnpj,
-
-        nome:nome
-
-    });
-
-
-
-    mostrarFundos();
-
-
-}
-
-function mostrarFundos(){
-
-
-    const div = document.getElementById(
-        "fundosSelecionados"
-    );
-
-    if(!div){
-        return;
-    }
-
-
-    div.innerHTML="";
-
-
-    fundosSelecionados.forEach(
-        (fundo,index)=>{
-
-
-        div.innerHTML += `
-
-        <div class="result-card">
-
-        ${fundo.nome}
-
-        <button onclick="removerFundo(${index})">
-        X
-        </button>
-
-        </div>
-
-        `;
-
-
-    });
-
-
-}
-
-function removerFundo(index){
-
-    fundosSelecionados.splice(
-        index,
-        1
-    );
-
-
-    mostrarFundos();
-
-}
-
-
-function obterUltimoMesCompleto(){
-
-    const hoje = new Date();
-
-    let ano = hoje.getFullYear();
-    let mes = hoje.getMonth(); // já é o mês anterior (getMonth() é 0-indexed)
-
-    if(mes === 0){
-        mes = 12;
-        ano -= 1;
-    }
-
-    return { ano, mes };
-
-}
-
-
-function formatarAnoMes(ano, mes){
-
-    return `${ano}-${String(mes).padStart(2, "0")}`;
-
-}
-
-
-function configurarLimitesMeses(){
-
-    const { ano, mes } = obterUltimoMesCompleto();
-
-    const limite = formatarAnoMes(ano, mes);
-
-    const campoDataFinal = document.getElementById("data_final");
-
-    if(campoDataFinal){
-        campoDataFinal.max = limite;
-    }
-
-    const campoPeriodoCompararFinal = document.getElementById("cmp_periodo_data_final");
-
-    if(campoPeriodoCompararFinal){
-        campoPeriodoCompararFinal.max = limite;
-    }
-
-}
-
-
-async function consultar() {
-
-
-    console.log("Botão clicado");
-
-
-    const cnpj = document
-        .getElementById("cnpj")
-        .value;
-
-
-    const data_inicial = document
-        .getElementById("data_inicial")
-        .value;
-
-
-    const data_final = document
-        .getElementById("data_final")
-        .value;
-
-
-
-    if (!cnpj || !data_inicial || !data_final) {
-
-        document.getElementById("resultado").innerHTML =
-            `
-            <p>
-            Preencha todos os campos.
-            </p>
-            `;
-
-        return;
-
-    }
-
-
-
-    try {
-
-
-        const resposta = await fetch(
-            "/api/fundo/variacao",
-            {
-
-                method: "POST",
-
-                headers: {
-
-                    "Content-Type": "application/json"
-
-                },
-
-                body: JSON.stringify({
-
-                    cnpj: cnpj,
-
-                    data_inicial: data_inicial,
-
-                    data_final: data_final
-
-                })
-
-            }
-
-        );
-
-
-
-        const dados = await resposta.json();
-
-
-
-        console.log(dados);
-
-
-
-        if (dados.erro) {
-
-
-            document.getElementById("resultado").innerHTML =
-            `
-            <p>
-            ${dados.erro}
-            </p>
-            `;
-
-
+    // ==========================================
+    // 3. ANÁLISE INDIVIDUAL
+    // ==========================================
+    
+    const inputBuscaInd = document.getElementById('busca_fundo_individual');
+    const listaInd = document.getElementById('lista_fundos_individual');
+    const inputCnpjInd = document.getElementById('cnpj_individual');
+
+    const renderDropdown = (items, listElement, onSelect) => {
+        listElement.innerHTML = '';
+        if(items.length === 0) {
+            listElement.classList.add('hidden');
             return;
-
         }
+        
+        items.forEach((item, index) => {
+            const li = document.createElement('li');
+            li.className = 'px-4 py-3 cursor-pointer hover:bg-white/5 border-b border-white/5 last:border-0 text-sm staggered-item text-gray-200 transition-colors';
+            li.style.animationDelay = `${index * 0.05}s`;
+            li.textContent = item.DENOM_SOCIAL;
+            
+            li.addEventListener('click', () => {
+                onSelect(item);
+                listElement.classList.add('hidden');
+            });
+            listElement.appendChild(li);
+        });
+        listElement.classList.remove('hidden');
+    };
 
+    const fetchBuscaInd = debounce(async (termo) => {
+        if(termo.length < 3) {
+            listaInd.classList.add('hidden');
+            return;
+        }
+        try {
+            const res = await fetch(`/api/fundos/buscar?busca=${encodeURIComponent(termo)}`);
+            const data = await res.json();
+            renderDropdown(data, listaInd, (item) => {
+                inputBuscaInd.value = item.DENOM_SOCIAL;
+                inputCnpjInd.value = item.CNPJ_FUNDO;
+            });
+        } catch (e) { console.error(e); }
+    }, 400);
 
+    inputBuscaInd.addEventListener('input', (e) => fetchBuscaInd(e.target.value));
+    
+    // Fechar dropdown ao clicar fora
+    document.addEventListener('click', (e) => {
+        if(!inputBuscaInd.contains(e.target)) listaInd.classList.add('hidden');
+    });
 
+    document.getElementById('btn_analisar').addEventListener('click', async () => {
+        const cnpj = inputCnpjInd.value;
+        const dtIni = document.getElementById('data_ini_individual').value;
+        const dtFim = document.getElementById('data_fim_individual').value;
 
-        document.getElementById("resultado").innerHTML =
-
-        `
-        <h2>Resultado</h2>
-
-        <p>
-        <strong>CNPJ:</strong>
-        ${dados.cnpj}
-        </p>
-
-
-        <p>
-        <strong>Período:</strong>
-        ${dados.data_inicial}
-        até
-        ${dados.data_final}
-        </p>
-
-
-        <p>
-        <strong>Variação:</strong>
-        ${dados.variacao_percentual}%
-        </p>
-        `;
-
-
-
-    } catch (erro) {
-
-
-        console.error(erro);
-
-
-        document.getElementById("resultado").innerHTML =
-        `
-        <p>
-        Erro ao comunicar com o servidor.
-        </p>
-        `;
-
-
-    }
-
-
-}
-
-
-/* ---------- Comparação de múltiplos fundos e múltiplos períodos ---------- */
-
-
-const campoFundoComparar =
-document.getElementById("cmp_fundo_busca");
-
-
-if(campoFundoComparar){
-
-    campoFundoComparar.addEventListener(
-        "input",
-        buscarFundosComparar
-    );
-
-}
-
-
-// fecha as sugestões da comparação se o usuário clicar fora
-document.addEventListener("click", function(evento){
-
-    if(!campoFundoComparar){
-        return;
-    }
-
-    const divSugestoes = document.getElementById("cmp_sugestoes");
-
-    const dentroDoCampo =
-        campoFundoComparar.contains(evento.target);
-
-    const dentroDasSugestoes =
-        divSugestoes.contains(evento.target);
-
-    if(!dentroDoCampo && !dentroDasSugestoes){
-        divSugestoes.innerHTML = "";
-    }
-
-});
-
-
-async function buscarFundosComparar(){
-
-    const termo = campoFundoComparar.value.trim();
-
-    if(termo.length < 3){
-        document.getElementById("cmp_sugestoes").innerHTML = "";
-        return;
-    }
-
-    try {
-
-        const resposta = await fetch(
-            `/api/fundos/buscar?busca=${encodeURIComponent(termo)}`
-        );
-
-        if(!resposta.ok){
-            console.error("Erro na busca de fundos:", resposta.status);
+        if(!cnpj || !dtIni || !dtFim) {
+            alert('Por favor, preencha o fundo e ambas as datas.');
             return;
         }
 
-        const fundos = await resposta.json();
-
-        mostrarSugestoesComparar(fundos);
-
-    } catch (erro) {
-
-        console.error("Erro ao buscar fundos:", erro);
-
-    }
-
-}
-
-
-function mostrarSugestoesComparar(fundos){
-
-    const div = document.getElementById("cmp_sugestoes");
-
-    div.innerHTML = "";
-
-    if(fundos.length === 0){
-
-        const vazio = document.createElement("div");
-
-        vazio.className = "sugestao sugestao-vazia";
-
-        vazio.textContent = "Nenhum fundo encontrado";
-
-        div.appendChild(vazio);
-
-        return;
-
-    }
-
-    fundos.forEach(fundo => {
-
-        const item = document.createElement("div");
-
-        item.className = "sugestao";
-
-        item.textContent = fundo.DENOM_SOCIAL;
-
-        item.onclick = function(){
-
-            const jaAdicionado = cmpFundos.some(
-                f => f.cnpj === fundo.CNPJ_FUNDO
-            );
-
-            if(jaAdicionado){
-
-                alert("Esse fundo já foi adicionado");
-
+        showLoader();
+        try {
+            const res = await fetch('/api/fundo/variacao', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ cnpj, data_inicial: dtIni, data_final: dtFim })
+            });
+            const data = await res.json();
+            
+            if(data.erro) {
+                alert(data.erro);
             } else {
-
-                cmpFundos.push({
-                    cnpj: fundo.CNPJ_FUNDO,
-                    nome: fundo.DENOM_SOCIAL
-                });
-
-                mostrarFundosComparar();
-
+                const resultDiv = document.getElementById('resultado_individual');
+                document.getElementById('valor_variacao').innerHTML = formatValue(data.variacao_percentual);
+                resultDiv.classList.remove('hidden');
             }
-
-            campoFundoComparar.value = "";
-
-            div.innerHTML = "";
-
-        };
-
-        div.appendChild(item);
-
+        } catch(e) {
+            alert('Erro ao buscar dados.');
+        } finally {
+            hideLoader();
+        }
     });
 
-}
+    // ==========================================
+    // 4. COMPARAÇÃO DE FUNDOS
+    // ==========================================
+    
+    let fundosSelecionados = [];
+    let periodosSelecionados = [];
 
+    const inputBuscaComp = document.getElementById('busca_fundo_comparacao');
+    const listaComp = document.getElementById('lista_fundos_comparacao');
+    const divFundos = document.getElementById('fundos_adicionados');
+    const divPeriodos = document.getElementById('periodos_adicionados');
 
-function mostrarFundosComparar(){
-
-    const div = document.getElementById("cmp_fundosSelecionados");
-
-    div.innerHTML = "";
-
-    cmpFundos.forEach((fundo, index) => {
-
-        div.innerHTML += `
-        <div class="result-card">
-            ${fundo.nome}
-            <button onclick="removerFundoComparar(${index})">X</button>
-        </div>
-        `;
-
-    });
-
-}
-
-
-function removerFundoComparar(index){
-
-    cmpFundos.splice(index, 1);
-
-    mostrarFundosComparar();
-
-}
-
-
-function adicionarPeriodoComparar(){
-
-    const label = document.getElementById("cmp_periodo_label").value.trim();
-
-    const data_inicial = document.getElementById("cmp_periodo_data_inicial").value;
-
-    const data_final = document.getElementById("cmp_periodo_data_final").value;
-
-    if(!data_inicial || !data_final){
-        alert("Preencha data inicial e data final do período");
-        return;
-    }
-
-    if(data_inicial > data_final){
-        alert("A data inicial não pode ser depois da data final");
-        return;
-    }
-
-    const { ano, mes } = obterUltimoMesCompleto();
-    const limite = formatarAnoMes(ano, mes);
-
-    if(data_final > limite){
-        alert(`Só é possível consultar até ${limite} (último mês fechado)`);
-        return;
-    }
-
-    cmpPeriodos.push({
-        data_inicial: data_inicial,
-        data_final: data_final,
-        label: label || `${data_inicial} até ${data_final}`
-    });
-
-    document.getElementById("cmp_periodo_label").value = "";
-    document.getElementById("cmp_periodo_data_inicial").value = "";
-    document.getElementById("cmp_periodo_data_final").value = "";
-
-    mostrarPeriodosComparar();
-
-}
-
-
-function mostrarPeriodosComparar(){
-
-    const div = document.getElementById("cmp_periodosSelecionados");
-
-    div.innerHTML = "";
-
-    cmpPeriodos.forEach((periodo, index) => {
-
-        div.innerHTML += `
-        <div class="result-card">
-            ${periodo.label}
-            <button onclick="removerPeriodoComparar(${index})">X</button>
-        </div>
-        `;
-
-    });
-
-}
-
-
-function removerPeriodoComparar(index){
-
-    cmpPeriodos.splice(index, 1);
-
-    mostrarPeriodosComparar();
-
-}
-
-
-async function compararFundos(){
-
-    if(cmpFundos.length === 0){
-        alert("Adicione ao menos um fundo");
-        return;
-    }
-
-    if(cmpPeriodos.length === 0){
-        alert("Adicione ao menos um período");
-        return;
-    }
-
-    const divResultado = document.getElementById("cmp_resultado");
-
-    divResultado.innerHTML = `<p>Calculando... isso pode levar alguns minutos na primeira consulta, pois os dados são baixados diretamente da CVM.</p>`;
-
-    try {
-
-        const resposta = await fetch("/api/fundos/comparar", {
-
-            method: "POST",
-
-            headers: {
-                "Content-Type": "application/json"
-            },
-
-            body: JSON.stringify({
-                fundos: cmpFundos,
-                periodos: cmpPeriodos
-            })
-
+    const renderFundosChips = () => {
+        divFundos.innerHTML = '';
+        fundosSelecionados.forEach((fundo, idx) => {
+            const chip = document.createElement('div');
+            chip.className = 'flex items-center gap-2 bg-neon/10 border border-neon/20 text-neon px-3 py-1 rounded-full text-xs animate-fade-in-up';
+            chip.innerHTML = `
+                <span class="truncate max-w-[200px]">${fundo.nome}</span>
+                <i class="ph ph-x cursor-pointer hover:text-white transition-colors" data-idx="${idx}"></i>
+            `;
+            chip.querySelector('i').addEventListener('click', () => {
+                fundosSelecionados.splice(idx, 1);
+                renderFundosChips();
+            });
+            divFundos.appendChild(chip);
         });
+    };
 
-        const dados = await resposta.json();
-
-        if(dados.erro){
-            divResultado.innerHTML = `<p>${dados.erro}</p>`;
+    const fetchBuscaComp = debounce(async (termo) => {
+        if(termo.length < 3) {
+            listaComp.classList.add('hidden');
             return;
         }
+        try {
+            const res = await fetch(`/api/fundos/buscar?busca=${encodeURIComponent(termo)}`);
+            const data = await res.json();
+            renderDropdown(data, listaComp, (item) => {
+                if(!fundosSelecionados.find(f => f.cnpj === item.CNPJ_FUNDO)) {
+                    fundosSelecionados.push({ cnpj: item.CNPJ_FUNDO, nome: item.DENOM_SOCIAL });
+                    renderFundosChips();
+                }
+                inputBuscaComp.value = '';
+            });
+        } catch (e) { console.error(e); }
+    }, 400);
 
-        let cabecalho = "<th>Fundo</th>";
+    inputBuscaComp.addEventListener('input', (e) => fetchBuscaComp(e.target.value));
+    
+    document.addEventListener('click', (e) => {
+        if(!inputBuscaComp.contains(e.target)) listaComp.classList.add('hidden');
+    });
 
-        cmpPeriodos.forEach(periodo => {
-            cabecalho += `<th>${periodo.label}</th>`;
+    // Períodos
+    const renderPeriodosChips = () => {
+        divPeriodos.innerHTML = '';
+        periodosSelecionados.forEach((p, idx) => {
+            const chip = document.createElement('div');
+            chip.className = 'flex items-center gap-2 bg-white/5 border border-white/10 text-gray-300 px-3 py-1 rounded-full text-xs animate-fade-in-up';
+            chip.innerHTML = `
+                <span>${p.data_inicial} até ${p.data_final}</span>
+                <i class="ph ph-x cursor-pointer hover:text-white transition-colors" data-idx="${idx}"></i>
+            `;
+            chip.querySelector('i').addEventListener('click', () => {
+                periodosSelecionados.splice(idx, 1);
+                renderPeriodosChips();
+            });
+            divPeriodos.appendChild(chip);
         });
+    };
 
-        let linhas = "";
+    document.getElementById('btn_add_periodo').addEventListener('click', () => {
+        const dI = document.getElementById('comp_data_ini').value;
+        const dF = document.getElementById('comp_data_fim').value;
+        
+        if(!dI || !dF) {
+            alert('Preencha as datas do período.'); return;
+        }
+        
+        periodosSelecionados.push({ data_inicial: dI, data_final: dF });
+        renderPeriodosChips();
+        document.getElementById('comp_data_ini').value = '';
+        document.getElementById('comp_data_fim').value = '';
+    });
 
-        dados.fundos.forEach(fundo => {
+    // Comparar
+    document.getElementById('btn_comparar').addEventListener('click', async () => {
+        if(fundosSelecionados.length === 0 || periodosSelecionados.length === 0) {
+            alert('Adicione pelo menos um fundo e um período.'); return;
+        }
 
-            let celulas = `<td>${fundo.nome}</td>`;
+        showLoader();
+        try {
+            const res = await fetch('/api/fundos/comparar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    fundos: fundosSelecionados,
+                    periodos: periodosSelecionados
+                })
+            });
+            const data = await res.json();
+            
+            if(data.erro) {
+                alert(data.erro);
+                hideLoader();
+                return;
+            }
 
-            fundo.variacoes.forEach(variacao => {
-
-                const classe = variacao.variacao_percentual >= 0 ? "positive" : "negative";
-
-                celulas += `<td class="${classe}">${variacao.variacao_percentual}%</td>`;
-
+            // Renderizar Tabela
+            const thead = document.getElementById('tabela_comparacao_head');
+            const tbody = document.getElementById('tabela_comparacao_body');
+            
+            thead.innerHTML = '<th class="px-4 py-3 font-medium text-gray-400">Fundo</th>';
+            data.periodos.forEach(p => {
+                thead.innerHTML += `<th class="px-4 py-3 font-medium text-gray-400 text-right">${p.data_inicial} <br> ${p.data_final}</th>`;
             });
 
-            linhas += `<tr>${celulas}</tr>`;
+            tbody.innerHTML = '';
+            data.fundos.forEach(f => {
+                let row = `<tr>
+                    <td class="px-4 py-4 text-gray-200">
+                        <div class="truncate max-w-[250px] font-medium" title="${f.nome}">${f.nome}</div>
+                        <div class="text-xs text-gray-500">${f.cnpj}</div>
+                    </td>`;
+                
+                f.variacoes.forEach(v => {
+                    row += `<td class="px-4 py-4 text-right font-medium">${formatValue(v.variacao_percentual)}</td>`;
+                });
+                row += '</tr>';
+                tbody.innerHTML += row;
+            });
 
-        });
+            document.getElementById('resultado_comparacao').classList.remove('hidden');
+        } catch(e) {
+            alert('Erro ao comparar fundos.');
+        } finally {
+            hideLoader();
+        }
+    });
 
-        divResultado.innerHTML = `
-        <table>
-            <thead>
-                <tr>${cabecalho}</tr>
-            </thead>
-            <tbody>
-                ${linhas}
-            </tbody>
-        </table>
-        `;
-
-    } catch (erro) {
-
-        console.error(erro);
-
-        divResultado.innerHTML = `<p>Erro ao comunicar com o servidor.</p>`;
-
-    }
-
-}
+});
