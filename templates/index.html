@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phronesis | Análise de Fundos CVM</title>
+    <title>Phronesis | Comparação de Fundos CVM</title>
     <!-- Fontes Modernas -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,145 +40,107 @@
     <div class="fixed top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-neonDim blur-[120px] opacity-30 pointer-events-none pulse-slow"></div>
     <div class="fixed bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-neonDim blur-[120px] opacity-20 pointer-events-none pulse-slower"></div>
 
-    <div class="max-w-6xl mx-auto px-6 py-12 relative z-10">
+    <div class="max-w-4xl mx-auto px-6 py-12 relative z-10">
         
         <header class="mb-16 text-center animate-fade-in-up">
             <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white to-neon">
-                Análise de Fundos <span class="text-neon">CVM</span>
+                Comparação de Fundos <span class="text-neon">CVM</span>
             </h1>
             <p class="text-gray-400 text-lg font-light max-w-2xl mx-auto">
-                Explore rentabilidades históricas e compare fundos de investimento com dados oficiais da CVM.
+                Compare a rentabilidade de múltiplos fundos de investimento em diferentes períodos com dados oficiais da CVM.
             </p>
         </header>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-            
-            <!-- SEÇÃO: ANÁLISE INDIVIDUAL -->
-            <section class="glass-panel p-8 rounded-3xl relative group tilt-card animate-fade-in-up" style="animation-delay: 0.1s;">
-                <div class="absolute inset-0 rounded-3xl border border-white/5 group-hover:border-neon/30 transition-colors duration-500 pointer-events-none"></div>
-                
-                <div class="flex items-center gap-3 mb-8">
-                    <div class="w-10 h-10 rounded-full bg-neon/10 flex items-center justify-center text-neon icon-scale-hover">
-                        <i class="ph ph-chart-line-up text-xl"></i>
-                    </div>
-                    <h2 class="text-2xl font-semibold">Análise Individual</h2>
-                </div>
+        <!-- SEÇÃO: COMPARAÇÃO DE FUNDOS -->
+        <section class="glass-panel p-8 rounded-3xl relative group tilt-card animate-fade-in-up">
+            <div class="absolute inset-0 rounded-3xl border border-white/5 group-hover:border-neon/30 transition-colors duration-500 pointer-events-none"></div>
 
-                <div class="space-y-6 relative">
-                    <!-- Busca -->
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-10 h-10 rounded-full bg-neon/10 flex items-center justify-center text-neon icon-scale-hover">
+                    <i class="ph ph-scales text-xl"></i>
+                </div>
+                <h2 class="text-2xl font-semibold">Comparar Fundos</h2>
+            </div>
+
+            <div class="space-y-6">
+                <!-- Adicionar Fundo -->
+                <div class="relative">
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Adicionar Fundos</label>
                     <div class="relative">
-                        <label class="block text-sm font-medium text-gray-400 mb-2">Buscar Fundo</label>
-                        <div class="relative">
-                            <i class="ph ph-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                            <input type="text" id="busca_fundo_individual" class="w-full bg-black/50 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all" placeholder="Nome do fundo...">
-                        </div>
-                        <!-- Lista Suspensa Autocomplete -->
-                        <ul id="lista_fundos_individual" class="absolute z-50 w-full mt-2 bg-[#121212] border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto hidden glass-panel"></ul>
+                        <i class="ph ph-plus absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input type="text" id="busca_fundo_comparacao" class="w-full bg-black/50 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all" placeholder="Buscar para comparar...">
                     </div>
-                    <input type="hidden" id="cnpj_individual">
-
-                    <!-- Datas -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-400 mb-2">Mês Inicial</label>
-                            <input type="month" id="data_ini_individual" class="w-full bg-black/50 border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-neon transition-all custom-calendar-icon">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-400 mb-2">Mês Final</label>
-                            <input type="month" id="data_fim_individual" class="w-full bg-black/50 border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-neon transition-all custom-calendar-icon">
-                        </div>
-                    </div>
-
-                    <!-- Botão -->
-                    <button id="btn_analisar" class="w-full py-4 mt-4 bg-neon/10 text-neon font-semibold rounded-xl border border-neon/20 hover:bg-neon hover:text-black transition-all duration-300 magnetic-btn flex justify-center items-center gap-2">
-                        <span>Analisar Rentabilidade</span>
-                        <i class="ph ph-arrow-right"></i>
-                    </button>
+                    <ul id="lista_fundos_comparacao" class="absolute z-50 w-full mt-2 bg-[#121212] border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto hidden glass-panel"></ul>
                 </div>
 
-                <!-- Resultado -->
-                <div id="resultado_individual" class="mt-8 hidden">
-                    <div class="p-6 rounded-2xl bg-black/40 border border-white/5 result-fade-in flex flex-col items-center justify-center">
-                        <span class="text-sm text-gray-400 mb-1">Variação do Período</span>
-                        <div class="text-4xl font-bold flex items-center gap-2" id="valor_variacao">
-                            <!-- Injetado via JS -->
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-
-            <!-- SEÇÃO: COMPARAÇÃO -->
-            <section class="glass-panel p-8 rounded-3xl relative group tilt-card animate-fade-in-up" style="animation-delay: 0.2s;">
-                <div class="absolute inset-0 rounded-3xl border border-white/5 group-hover:border-neon/30 transition-colors duration-500 pointer-events-none"></div>
-
-                <div class="flex items-center gap-3 mb-8">
-                    <div class="w-10 h-10 rounded-full bg-neon/10 flex items-center justify-center text-neon icon-scale-hover">
-                        <i class="ph ph-scales text-xl"></i>
-                    </div>
-                    <h2 class="text-2xl font-semibold">Comparar Fundos</h2>
+                <!-- Chips de Fundos Adicionados -->
+                <div id="fundos_adicionados" class="flex flex-wrap gap-2 empty:hidden min-h-[40px]">
+                    <!-- Injetado via JS -->
                 </div>
 
-                <div class="space-y-6">
-                    <!-- Adicionar Fundo -->
-                    <div class="relative">
-                        <label class="block text-sm font-medium text-gray-400 mb-2">Adicionar Fundos</label>
-                        <div class="relative">
-                            <i class="ph ph-plus absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                            <input type="text" id="busca_fundo_comparacao" class="w-full bg-black/50 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all" placeholder="Buscar para comparar...">
-                        </div>
-                        <ul id="lista_fundos_comparacao" class="absolute z-50 w-full mt-2 bg-[#121212] border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto hidden glass-panel"></ul>
+                <hr class="border-white/5 my-4">
+
+                <!-- Adicionar Períodos -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Adicionar Períodos Customizados</label>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="month" id="comp_data_ini" class="flex-1 bg-black/50 border border-white/10 rounded-xl py-2 px-3 text-white text-sm focus:outline-none focus:border-neon transition-all custom-calendar-icon">
+                        <input type="month" id="comp_data_fim" class="flex-1 bg-black/50 border border-white/10 rounded-xl py-2 px-3 text-white text-sm focus:outline-none focus:border-neon transition-all custom-calendar-icon">
+                        <button id="btn_add_periodo" class="bg-surface hover:bg-surfaceHover text-white px-4 py-2 rounded-xl transition-all border border-white/10 text-sm flex items-center justify-center magnetic-btn">
+                            <i class="ph ph-plus"></i>
+                        </button>
                     </div>
-
-                    <!-- Chips de Fundos Adicionados -->
-                    <div id="fundos_adicionados" class="flex flex-wrap gap-2 empty:hidden min-h-[40px]">
-                        <!-- Injetado via JS -->
+                </div>
+                <div class="mt-6">
+                    <label class="block text-sm font-medium text-gray-400 mb-3">
+                        Períodos Padrão (Dias Úteis)
+                <div class="mt-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <label class="text-sm font-medium text-gray-400">
+                            Períodos Padrão (Dias Úteis)
+                        </label>
+                        <span class="text-xs text-gray-500" id="data_referencia_label">
+                            <!-- Preenchido via JS -->
+                        </span>
                     </div>
-
-                    <hr class="border-white/5 my-4">
-
-                    <!-- Adicionar Períodos -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-400 mb-2">Adicionar Períodos Customizados</label>
-                        <div class="flex flex-col sm:flex-row gap-3">
-                            <input type="month" id="comp_data_ini" class="flex-1 bg-black/50 border border-white/10 rounded-xl py-2 px-3 text-white text-sm focus:outline-none focus:border-neon transition-all custom-calendar-icon">
-                            <input type="month" id="comp_data_fim" class="flex-1 bg-black/50 border border-white/10 rounded-xl py-2 px-3 text-white text-sm focus:outline-none focus:border-neon transition-all custom-calendar-icon">
-                            <button id="btn_add_periodo" class="bg-surface hover:bg-surfaceHover text-white px-4 py-2 rounded-xl transition-all border border-white/10 text-sm flex items-center justify-center magnetic-btn">
-                                <i class="ph ph-plus"></i>
-                            </button>
-                        </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="periodos_padrao_container">
+                        <!-- Preenchido via JavaScript -->
                     </div>
-
-                    <!-- Chips de Períodos Adicionados -->
-                    <div id="periodos_adicionados" class="flex flex-wrap gap-2 empty:hidden min-h-[40px]">
-                        <!-- Injetado via JS -->
+                </div>
+                    </label>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="periodos_padrao_container">
+                        <!-- Preenchido via JavaScript -->
                     </div>
-
-                    <!-- Botão -->
-                    <button id="btn_comparar" class="w-full py-4 mt-6 bg-white text-black font-semibold rounded-xl hover:bg-neon transition-all duration-300 magnetic-btn flex justify-center items-center gap-2">
-                        <i class="ph ph-magic-wand"></i>
-                        <span>Gerar Comparativo</span>
-                    </button>
+                </div>
+                <!-- Chips de Períodos Adicionados -->
+                <div id="periodos_adicionados" class="flex flex-wrap gap-2 empty:hidden min-h-[40px]">
+                    <!-- Injetado via JS -->
                 </div>
 
-                <!-- Resultado Comparação -->
-                <div id="resultado_comparacao" class="mt-8 hidden">
-                    <div class="overflow-x-auto rounded-xl border border-white/5 bg-black/40 p-1">
-                        <table class="w-full text-left text-sm whitespace-nowrap">
-                            <thead class="bg-white/5 border-b border-white/10">
-                                <tr id="tabela_comparacao_head">
-                                    <!-- JS -->
-                                </tr>
-                            </thead>
-                            <tbody id="tabela_comparacao_body" class="divide-y divide-white/5">
+                <!-- Botão -->
+                <button id="btn_comparar" class="w-full py-4 mt-6 bg-white text-black font-semibold rounded-xl hover:bg-neon transition-all duration-300 magnetic-btn flex justify-center items-center gap-2">
+                    <i class="ph ph-magic-wand"></i>
+                    <span>Gerar Comparativo</span>
+                </button>
+            </div>
+
+            <!-- Resultado Comparação -->
+            <div id="resultado_comparacao" class="mt-8 hidden">
+                <div class="overflow-x-auto rounded-xl border border-white/5 bg-black/40 p-1">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-white/5 border-b border-white/10">
+                            <tr id="tabela_comparacao_head">
                                 <!-- JS -->
-                            </tbody>
-                        </table>
-                    </div>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela_comparacao_body" class="divide-y divide-white/5">
+                            <!-- JS -->
+                        </tbody>
+                    </table>
                 </div>
+            </div>
 
-            </section>
-        </div>
+        </section>
     </div>
 
     <!-- Loader Global Overlay -->

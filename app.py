@@ -1,48 +1,21 @@
-from datetime import datetime, timedelta
-
 from flask import Flask, render_template, request, jsonify
 
-from services.cvm import (
-    carregar_historico_fundo,
-    calcular_variacao_periodo,
-    filtrar_periodo
-)
 from services.nome_fundo import carregar_depara_fundos
+from services.fundos_service import (
+    processar_variacao_fundo,
+    processar_comparacao_fundos
+)
+from utils.validacoes import (
+    validar_dados_variacao,
+    validar_dados_comparacao,
+    gerar_todos_periodos,
+    obter_ultimo_mes_completo
+)
 
 app = Flask(__name__)
 
-
-# carrega uma vez quando o Flask inicia
+# Carrega uma vez quando o Flask inicia
 df_fundos = carregar_depara_fundos()
-
-
-def formatar_cnpj(cnpj: str) -> str:
-
-    cnpj = (
-        cnpj
-        .replace(".", "")
-        .replace("/", "")
-        .replace("-", "")
-    )
-
-    return (
-        cnpj[:2] + "."
-        + cnpj[2:5] + "."
-        + cnpj[5:8] + "/"
-        + cnpj[8:12] + "-"
-        + cnpj[12:]
-    )
-
-
-def obter_ultimo_mes_completo() -> str:
-
-    hoje = datetime.today()
-
-    primeiro_dia_mes_atual = hoje.replace(day=1)
-
-    ultimo_dia_mes_anterior = primeiro_dia_mes_atual - timedelta(days=1)
-
-    return ultimo_dia_mes_anterior.strftime("%Y-%m")
 
 
 @app.route("/")
@@ -52,173 +25,81 @@ def index():
 
 @app.route("/api/fundos")
 def listar_fundos():
-
     fundos = (
         df_fundos
         .sort_values("DENOM_SOCIAL")
         .to_dict(orient="records")
     )
-
     return jsonify(fundos)
 
 
 @app.route("/api/fundos/buscar")
 def buscar_fundos():
-
-    termo = request.args.get(
-        "busca",
-        ""
-    )
-
+    termo = request.args.get("busca", "")
+    
     if len(termo) < 3:
-
         return jsonify([])
-
+    
     resultado = (
         df_fundos[
             df_fundos["DENOM_SOCIAL"]
-            .str.contains(
-                termo,
-                case=False,
-                na=False
-            )
+            .str.contains(termo, case=False, na=False)
         ]
         .head(10)
     )
+    
+    return jsonify(resultado.to_dict(orient="records"))
 
-    return jsonify(
-        resultado.to_dict(
-            orient="records"
-        )
-    )
 
+@app.route("/api/periodos/padrao")
+def periodos_padrao():
+    """
+    Retorna os períodos padrão para análise.
+    Inclui os períodos de 12m, 24m, 36m, 48m, 60m E "Desde o Início"
+    """
+    data_referencia = request.args.get("data_referencia")
+    
+    # Agora retorna TODOS os períodos, incluindo "Desde o Início"
+    periodos = gerar_todos_periodos(data_referencia)
+    
+    return jsonify(periodos)
 
 @app.post("/api/fundo/variacao")
 def variacao_fundo():
-
     dados = request.get_json()
-
-    cnpj = dados.get("cnpj")
-    data_inicial = dados.get("data_inicial")
-    data_final = dados.get("data_final")
-
-    if not cnpj or not data_inicial or not data_final:
-        return jsonify({
-            "erro": "Informe CNPJ, data inicial e data final"
-        }), 400
-
-    ultimo_mes_completo = obter_ultimo_mes_completo()
-
-    if data_final > ultimo_mes_completo:
-        return jsonify({
-            "erro": f"Só é possível consultar até {ultimo_mes_completo} (último mês fechado)"
-        }), 400
-
-    cnpj = formatar_cnpj(cnpj)
-
-    df = carregar_historico_fundo(
-        cnpj,
-        data_inicial,
-        data_final
+    
+    # Validação
+    valido, erro = validar_dados_variacao(dados)
+    if not valido:
+        return jsonify({"erro": erro}), 400
+    
+    # Processamento
+    resultado = processar_variacao_fundo(
+        cnpj=dados["cnpj"],
+        data_inicial=dados["data_inicial"],
+        data_final=dados["data_final"]
     )
-
-    variacao = calcular_variacao_periodo(df)
-
-    return jsonify({
-        "cnpj": cnpj,
-        "data_inicial": data_inicial,
-        "data_final": data_final,
-        "variacao_percentual": round(variacao, 2)
-    })
+    
+    return jsonify(resultado)
 
 
 @app.post("/api/fundos/comparar")
 def comparar_fundos():
-
     dados = request.get_json()
-
-    fundos = dados.get("fundos")
-    periodos = dados.get("periodos")
-
-    if not fundos:
-        return jsonify({
-            "erro": "Adicione ao menos um fundo"
-        }), 400
-
-    if not periodos:
-        return jsonify({
-            "erro": "Adicione ao menos um período"
-        }), 400
-
-    ultimo_mes_completo = obter_ultimo_mes_completo()
-
-    for periodo in periodos:
-
-        if not periodo.get("data_inicial") or not periodo.get("data_final"):
-            return jsonify({
-                "erro": "Preencha todas as datas dos períodos"
-            }), 400
-
-        if periodo["data_final"] > ultimo_mes_completo:
-            return jsonify({
-                "erro": f"Só é possível consultar até {ultimo_mes_completo} (último mês fechado)"
-            }), 400
-
-    # baixa/lê do cache o intervalo geral uma única vez por fundo,
-    # e depois recorta cada período dentro dele
-    data_inicial_geral = min(p["data_inicial"] for p in periodos)
-    data_final_geral = max(p["data_final"] for p in periodos)
-
-    resultado_fundos = []
-
-    for fundo in fundos:
-
-        cnpj = fundo.get("cnpj")
-        nome = fundo.get("nome", cnpj)
-
-        if not cnpj:
-            continue
-
-        cnpj_formatado = formatar_cnpj(cnpj)
-
-        df = carregar_historico_fundo(
-            cnpj_formatado,
-            data_inicial_geral,
-            data_final_geral
-        )
-
-        variacoes = []
-
-        for periodo in periodos:
-
-            df_periodo = filtrar_periodo(
-                df,
-                periodo["data_inicial"],
-                periodo["data_final"]
-            )
-
-            variacao = calcular_variacao_periodo(df_periodo)
-
-            variacoes.append({
-                "data_inicial": periodo["data_inicial"],
-                "data_final": periodo["data_final"],
-                "variacao_percentual": round(variacao, 2)
-            })
-
-        resultado_fundos.append({
-            "cnpj": cnpj_formatado,
-            "nome": nome,
-            "variacoes": variacoes
-        })
-
-    return jsonify({
-        "periodos": periodos,
-        "fundos": resultado_fundos
-    })
+    
+    # Validação
+    valido, erro = validar_dados_comparacao(dados)
+    if not valido:
+        return jsonify({"erro": erro}), 400
+    
+    # Processamento
+    resultado = processar_comparacao_fundos(
+        fundos=dados["fundos"],
+        periodos=dados["periodos"]
+    )
+    
+    return jsonify(resultado)
 
 
 if __name__ == "__main__":
-    app.run(
-        debug=True,
-        threaded=True
-    )
+    app.run(debug=True, threaded=True)
