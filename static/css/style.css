@@ -125,3 +125,76 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     opacity: 1 !important;
     pointer-events: auto !important;
 }
+
+/* Cores de referência para as faixas de volatilidade (usadas via classe utilitária) */
+.bg-vol-low  { background-color: #00ff88; }
+.bg-vol-mid  { background-color: #ffb020; }
+.bg-vol-high { background-color: #ff3366; }
+
+/* Container da célula: empilha rentabilidade (grande) + badge de volatilidade (pequeno) */
+.metric-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 52px;
+}
+
+.metric-cell .rentabilidade {
+    display: block;
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+}
+
+/* Badge de volatilidade: pill discreta, cor indica a faixa de risco (não bom/ruim) */
+.vol-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.vol-badge .vol-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.vol-badge-low {
+    background: rgba(0, 255, 136, 0.08);
+    border-color: rgba(0, 255, 136, 0.2);
+    color: #6fe8a8;
+}
+.vol-badge-low .vol-dot { background-color: #00ff88; }
+
+.vol-badge-mid {
+    background: rgba(255, 176, 32, 0.08);
+    border-color: rgba(255, 176, 32, 0.2);
+    color: #ffcb6b;
+}
+.vol-badge-mid .vol-dot { background-color: #ffb020; }
+
+.vol-badge-high {
+    background: rgba(255, 51, 102, 0.08);
+    border-color: rgba(255, 51, 102, 0.2);
+    color: #ff7a95;
+}
+.vol-badge-high .vol-dot { background-color: #ff3366; }
+
+.vol-badge-na {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #6b7280;
+}
+.vol-badge-na .vol-dot { background-color: #6b7280; }

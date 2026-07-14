@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-    
+
     // ==========================================
     // 1. EFEITOS DE UI/UX (Magnet e Tilt)
     // ==========================================
@@ -25,16 +25,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const rect = card.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
-            
+
             const centerX = rect.width / 2;
             const centerY = rect.height / 2;
-            
+
             const rotateX = ((y - centerY) / centerY) * -5;
             const rotateY = ((x - centerX) / centerX) * 5;
-            
+
             card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.01, 1.01, 1.01)`;
         });
-        
+
         card.addEventListener('mouseleave', () => {
             card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
         });
@@ -63,6 +63,14 @@ document.addEventListener("DOMContentLoaded", () => {
         return `<span class="text-gray-400">0.00%</span>`;
     };
 
+    // Formata a volatilidade
+    const formatVolatilidade = (vol) => {
+        if (vol === null || vol === undefined || isNaN(vol)) {
+            return `<span class="vol-badge"><span class="vol-dot"></span>Vol: s/ dados</span>`;
+        }
+
+        return `<span class="vol-badge"><span class="vol-dot"></span>Vol: ${vol.toFixed(2)}%</span>`;
+    };
     // Debounce function
     function debounce(func, timeout = 300){
         let timer;
@@ -75,7 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // ==========================================
     // 3. COMPARAÇÃO DE FUNDOS
     // ==========================================
-    
+
     let fundosSelecionados = [];
     let periodosSelecionados = [];
 
@@ -90,13 +98,13 @@ document.addEventListener("DOMContentLoaded", () => {
             listElement.classList.add('hidden');
             return;
         }
-        
+
         items.forEach((item, index) => {
             const li = document.createElement('li');
             li.className = 'px-4 py-3 cursor-pointer hover:bg-white/5 border-b border-white/5 last:border-0 text-sm staggered-item text-gray-200 transition-colors';
             li.style.animationDelay = `${index * 0.05}s`;
             li.textContent = item.DENOM_SOCIAL;
-            
+
             li.addEventListener('click', () => {
                 onSelect(item);
                 listElement.classList.add('hidden');
@@ -142,7 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 400);
 
     inputBuscaComp.addEventListener('input', (e) => fetchBuscaComp(e.target.value));
-    
+
     document.addEventListener('click', (e) => {
         if(!inputBuscaComp.contains(e.target)) listaComp.classList.add('hidden');
     });
@@ -156,11 +164,10 @@ document.addEventListener("DOMContentLoaded", () => {
         divPeriodos.innerHTML = '';
         periodosSelecionados.forEach((p, idx) => {
             const chip = document.createElement('div');
-            
-            // Estilo diferente para "Desde o Início"
+
             chip.className =
                 'flex items-center gap-2 bg-white/5 border border-white/10 text-gray-300 px-3 py-1 rounded-full text-xs animate-fade-in-up';
-            
+
             const label = p.label || `${p.data_inicial} até ${p.data_final}`;
             chip.innerHTML = `
                 <span>${label}</span>
@@ -178,29 +185,28 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('btn_add_periodo').addEventListener('click', () => {
         const dI = document.getElementById('comp_data_ini').value;
         const dF = document.getElementById('comp_data_fim').value;
-        
+
         if(!dI || !dF) {
             alert('Preencha as datas do período.');
             return;
         }
-        
-        // Verifica se o período já existe
-        const periodoExiste = periodosSelecionados.some(p => 
+
+        const periodoExiste = periodosSelecionados.some(p =>
             p.data_inicial === dI && p.data_final === dF
         );
-        
+
         if (periodoExiste) {
             alert('Este período já foi adicionado!');
             return;
         }
-        
-        periodosSelecionados.push({ 
-            data_inicial: dI, 
+
+        periodosSelecionados.push({
+            data_inicial: dI,
             data_final: dF,
             label: `${dI} até ${dF}`,
             tipo: 'customizado'
         });
-        
+
         renderPeriodosChips();
         document.getElementById('comp_data_ini').value = '';
         document.getElementById('comp_data_fim').value = '';
@@ -210,7 +216,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // 5. PERÍODOS PADRÃO
     // ==========================================
 
-    // Carregar períodos padrão da API
     async function carregarPeriodosPadrao() {
         try {
             const response = await fetch('/api/periodos/padrao');
@@ -221,14 +226,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Renderizar botões de períodos padrão
     function renderizarPeriodosPadrao(periodos) {
         const container = document.getElementById('periodos_padrao_container');
         if (!container) return;
-        
+
         container.innerHTML = '';
-        
-        // Atualiza label com data de referência
+
         if (periodos.length > 0) {
             const periodoRef = periodos.find(p => p.data_referencia);
             if (periodoRef) {
@@ -238,15 +241,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
         }
-        
+
         periodos.forEach(periodo => {
             const btn = document.createElement('button');
-            
-            // Estilo diferente para "Desde o Início"
+
             btn.className =
                 'bg-surface hover:bg-neon/10 text-gray-300 hover:text-neon px-3 py-2 rounded-lg transition-all border border-white/10 text-xs font-medium text-left w-full';
-                        
-            // Formata as datas para exibição
+
             if (periodo.tipo === 'desde_inicio') {
                 btn.innerHTML = `
                     <div class="font-medium">
@@ -260,7 +261,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const dataIni = new Date(periodo.data_inicial + 'T00:00:00');
                 const dataFim = new Date(periodo.data_final + 'T00:00:00');
                 const fmtData = (d) => d.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
-                
+
                 btn.innerHTML = `
                     <div class="font-medium">${periodo.label}</div>
                     <div class="text-gray-500 text-[10px] mt-0.5">
@@ -268,35 +269,33 @@ document.addEventListener("DOMContentLoaded", () => {
                     </div>
                 `;
             }
-            
+
             btn.addEventListener('click', () => {
                 adicionarPeriodoPadrao(periodo);
             });
-            
+
             container.appendChild(btn);
         });
     }
 
-    // Adicionar período padrão à lista
     function adicionarPeriodoPadrao(periodo) {
-        // Verifica se o período já foi adicionado
-        const periodoExiste = periodosSelecionados.some(p => 
-            p.data_inicial === periodo.data_inicial && 
+        const periodoExiste = periodosSelecionados.some(p =>
+            p.data_inicial === periodo.data_inicial &&
             p.data_final === periodo.data_final
         );
-        
+
         if (periodoExiste) {
             alert('Este período já foi adicionado!');
             return;
         }
-        
+
         periodosSelecionados.push({
             data_inicial: periodo.data_inicial,
             data_final: periodo.data_final,
             label: periodo.label,
             tipo: periodo.tipo || 'padrao'
         });
-        
+
         renderPeriodosChips();
     }
 
@@ -321,7 +320,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 })
             });
             const data = await res.json();
-            
+
             if(data.erro) {
                 alert(data.erro);
                 hideLoader();
@@ -331,15 +330,13 @@ document.addEventListener("DOMContentLoaded", () => {
             // Renderizar Tabela
             const thead = document.getElementById('tabela_comparacao_head');
             const tbody = document.getElementById('tabela_comparacao_body');
-            
+
             thead.innerHTML = '<th class="px-4 py-3 font-medium text-gray-400">Fundo</th>';
             data.periodos.forEach(p => {
                 let label;
                 if (p.label) {
-                    // Usa o label (ex: "12 Meses (252 du)")
                     label = p.label;
                 } else if (p.data_inicial && p.data_final) {
-                    // Formata datas
                     const ini = new Date(p.data_inicial + 'T00:00:00');
                     const fim = new Date(p.data_final + 'T00:00:00');
                     const fmt = (d) => d.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
@@ -353,37 +350,46 @@ document.addEventListener("DOMContentLoaded", () => {
             tbody.innerHTML = '';
             data.fundos.forEach(f => {
                 let row = `<tr class="border-b border-white/5">
-                    <td class="px-4 py-4 text-gray-200">
+                    <td class="px-4 py-4 text-gray-200 align-top">
                         <div class="truncate max-w-[250px] font-medium" title="${f.nome}">${f.nome}</div>
                         <div class="text-xs text-gray-500">${f.cnpj}</div>
                     </td>`;
-                
+
                 f.variacoes.forEach(v => {
-                    // Usa formatValueLarge para "Desde o Início"
-                    const valorFormatado = v.tipo === 'desde_inicio' 
+                    // Rentabilidade (formato grande para "Desde o Início")
+                    const valorFormatado = v.tipo === 'desde_inicio'
                         ? formatValueLarge(v.variacao_percentual)
                         : formatValue(v.variacao_percentual);
-                    
+
+                    // Badge de volatilidade
+                    const volFormatada = formatVolatilidade(v.volatilidade_percentual);
+
                     // Tooltip com informações extras para "Desde o Início"
                     let tooltip = '';
                     if (v.tipo === 'desde_inicio' && v.primeira_data) {
                         tooltip = `title="Desde ${v.primeira_data}"`;
                     }
-                    
-                    row += `<td class="px-4 py-4 text-right font-medium" ${tooltip}>${valorFormatado}</td>`;
+
+                    row += `
+                        <td class="px-4 py-4 text-right" ${tooltip}>
+                            <div class="metric-cell">
+                                <span class="rentabilidade font-medium">${valorFormatado}</span>
+                                ${volFormatada}
+                            </div>
+                        </td>`;
                 });
                 row += '</tr>';
                 tbody.innerHTML += row;
             });
 
-            document.getElementById('resultado_comparacao').classList.remove('hidden');
-            
-            // Scroll suave até a tabela
-            document.getElementById('resultado_comparacao').scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'nearest' 
-            });
-            
+            // Atualiza subtítulo com contagem de fundos/períodos
+            const subtitulo = document.getElementById('modal_subtitulo');
+            if (subtitulo) {
+                subtitulo.textContent = `${data.fundos.length} fundo(s) · ${data.periodos.length} período(s)`;
+            }
+
+            abrirModalResultado();
+
         } catch(e) {
             alert('Erro ao comparar fundos.');
             console.error(e);
@@ -393,10 +399,44 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // ==========================================
-    // 7. INICIALIZAÇÃO
+    // 7. MODAL DE RESULTADO (Tela Full-Screen)
     // ==========================================
-    
-    // Carrega os períodos padrão ao iniciar
+
+    const modalResultado = document.getElementById('modal_resultado');
+
+    function abrirModalResultado() {
+        modalResultado.classList.remove('hidden');
+        modalResultado.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+        modalResultado.querySelector('.relative.z-10').classList.add('result-fade-in');
+    }
+
+    function fecharModalResultado() {
+        modalResultado.classList.add('hidden');
+        modalResultado.classList.remove('flex');
+        document.body.style.overflow = '';
+    }
+
+    document.getElementById('btn_fechar_modal').addEventListener('click', fecharModalResultado);
+
+    // Fecha ao clicar no backdrop (fora do conteúdo)
+    modalResultado.addEventListener('click', (e) => {
+        if (e.target === modalResultado || e.target.classList.contains('bg-black/85')) {
+            fecharModalResultado();
+        }
+    });
+
+    // Fecha com ESC
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modalResultado.classList.contains('hidden')) {
+            fecharModalResultado();
+        }
+    });
+
+    // ==========================================
+    // 8. INICIALIZAÇÃO
+    // ==========================================
+
     carregarPeriodosPadrao();
 
 });

@@ -35,19 +35,19 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="bg-background text-white font-sans antialiased overflow-x-hidden relative min-h-screen">
-    
+
     <!-- Efeitos de iluminação de fundo (GlowBackground) -->
     <div class="fixed top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-neonDim blur-[120px] opacity-30 pointer-events-none pulse-slow"></div>
     <div class="fixed bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-neonDim blur-[120px] opacity-20 pointer-events-none pulse-slower"></div>
 
     <div class="max-w-4xl mx-auto px-6 py-12 relative z-10">
-        
+
         <header class="mb-16 text-center animate-fade-in-up">
             <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white to-neon">
                 Comparação de Fundos <span class="text-neon">CVM</span>
             </h1>
             <p class="text-gray-400 text-lg font-light max-w-2xl mx-auto">
-                Compare a rentabilidade de múltiplos fundos de investimento em diferentes períodos com dados oficiais da CVM.
+                Compare rentabilidade e volatilidade de múltiplos fundos de investimento em diferentes períodos com dados oficiais da CVM.
             </p>
         </header>
 
@@ -91,27 +91,20 @@
                         </button>
                     </div>
                 </div>
-                <div class="mt-6">
-                    <label class="block text-sm font-medium text-gray-400 mb-3">
-                        Períodos Padrão (Dias Úteis)
+
                 <div class="mt-6">
                     <div class="flex items-center justify-between mb-3">
                         <label class="text-sm font-medium text-gray-400">
                             Períodos Padrão (Dias Úteis)
                         </label>
-                        <span class="text-xs text-gray-500" id="data_referencia_label">
-                            <!-- Preenchido via JS -->
-                        </span>
+                        <span class="text-xs text-gray-500" id="data_referencia_label"></span>
                     </div>
+
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="periodos_padrao_container">
                         <!-- Preenchido via JavaScript -->
                     </div>
                 </div>
-                    </label>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="periodos_padrao_container">
-                        <!-- Preenchido via JavaScript -->
-                    </div>
-                </div>
+
                 <!-- Chips de Períodos Adicionados -->
                 <div id="periodos_adicionados" class="flex flex-wrap gap-2 empty:hidden min-h-[40px]">
                     <!-- Injetado via JS -->
@@ -124,23 +117,50 @@
                 </button>
             </div>
 
-            <!-- Resultado Comparação -->
-            <div id="resultado_comparacao" class="mt-8 hidden">
-                <div class="overflow-x-auto rounded-xl border border-white/5 bg-black/40 p-1">
-                    <table class="w-full text-left text-sm whitespace-nowrap">
-                        <thead class="bg-white/5 border-b border-white/10">
-                            <tr id="tabela_comparacao_head">
-                                <!-- JS -->
-                            </tr>
-                        </thead>
-                        <tbody id="tabela_comparacao_body" class="divide-y divide-white/5">
-                            <!-- JS -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
         </section>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TELA DE RESULTADO (Modal Full-Screen)       -->
+    <!-- ========================================== -->
+    <div id="modal_resultado" class="fixed inset-0 z-[90] hidden">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
+
+        <!-- Glow decorativo -->
+        <div class="fixed top-[-10%] right-[-10%] w-[45vw] h-[45vw] rounded-full bg-neonDim blur-[130px] opacity-25 pointer-events-none"></div>
+
+        <!-- Conteúdo -->
+        <div class="relative z-10 h-full flex flex-col max-w-6xl mx-auto px-4 sm:px-8 py-6 sm:py-10">
+
+            <!-- Header do modal -->
+            <div class="flex items-start justify-between mb-6 flex-shrink-0">
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neon">
+                        Resultado da Comparação
+                    </h2>
+                    <p class="text-gray-400 text-sm mt-1 font-light" id="modal_subtitulo">
+                        Rentabilidade e volatilidade por período
+                    </p>
+                </div>
+                <button id="btn_fechar_modal" class="w-10 h-10 flex-shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all magnetic-btn">
+                    <i class="ph ph-x text-xl"></i>
+                </button>
+            </div>
+            <!-- Tabela (scrollável dentro do modal) -->
+            <div class="flex-1 overflow-auto rounded-2xl border border-white/10 bg-black/40 glass-panel p-1">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="bg-white/5 border-b border-white/10 sticky top-0 backdrop-blur-md">
+                        <tr id="tabela_comparacao_head">
+                            <!-- JS -->
+                        </tr>
+                    </thead>
+                    <tbody id="tabela_comparacao_body" class="divide-y divide-white/5">
+                        <!-- JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Loader Global Overlay -->
