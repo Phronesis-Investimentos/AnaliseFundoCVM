@@ -5,6 +5,7 @@ from services.fundos_service import (
     processar_variacao_fundo,
     processar_comparacao_fundos,
     gerar_ranking_fundos,
+    calcular_volatilidade_ranking_fundo,
 )
 from utils.validacoes import (
     validar_dados_variacao,
@@ -128,6 +129,30 @@ def ranking_fundos():
         "data_referencia": data_referencia or obter_data_referencia().strftime("%Y-%m-%d"),
         "fundos": ranking,
     })
+
+
+@app.get("/api/fundo/volatilidade-ranking")
+def volatilidade_ranking_fundo():
+    """Calcula a volatilidade de um fundo específico nos cinco períodos do ranking.
+
+    Chamada sob demanda pelo botão "Ver Volatilidade" de cada linha do
+    ranking, para não pesar o cálculo do ranking geral (que não precisa da
+    série diária completa).
+    """
+    cnpj = request.args.get("cnpj")
+    if not cnpj:
+        return jsonify({"erro": "Informe o parâmetro cnpj"}), 400
+
+    data_referencia = request.args.get("data_referencia")
+    try:
+        resultado = calcular_volatilidade_ranking_fundo(
+            cnpj=cnpj,
+            data_referencia=data_referencia,
+        )
+    except (ValueError, TypeError) as erro:
+        return jsonify({"erro": str(erro)}), 400
+
+    return jsonify(resultado)
 
 
 if __name__ == "__main__":

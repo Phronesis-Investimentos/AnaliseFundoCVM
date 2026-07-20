@@ -136,6 +136,34 @@ def gerar_ranking_fundos(
     return resultados[:top_n]
 
 
+def calcular_volatilidade_ranking_fundo(
+    cnpj: str,
+    data_referencia: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Calcula a volatilidade anualizada de um fundo nos cinco períodos do ranking.
+
+    O ranking em si (gerar_ranking_fundos) só precisa dos fechamentos mensais
+    para calcular rentabilidade, então não carrega a série diária completa.
+    A volatilidade, porém, exige o histórico diário — por isso essa função é
+    separada e só é chamada sob demanda (botão "Ver Volatilidade" de um fundo
+    específico), evitando pesar o cálculo do ranking geral.
+    """
+    cnpj_formatado = formatar_cnpj(cnpj)
+    periodos = _periodos_ranking(data_referencia)
+
+    data_inicial_geral = min(periodo["data_inicial"] for periodo in periodos.values())
+    data_final_geral = periodos["60m"]["data_final"]
+
+    df = carregar_historico_fundo(cnpj_formatado, data_inicial_geral, data_final_geral)
+
+    resultado: Dict[str, Any] = {"cnpj": cnpj_formatado}
+    for chave, periodo in periodos.items():
+        df_periodo = filtrar_periodo(df, periodo["data_inicial"], periodo["data_final"])
+        resultado[f"volatilidade_{chave}"] = calcular_volatilidade_periodo(df_periodo)
+
+    return resultado
+
+
 def processar_variacao_fundo(
     cnpj: str,
     data_inicial: str,
