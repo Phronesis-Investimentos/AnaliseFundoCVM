@@ -51,9 +51,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Formatação de cor baseada na rentabilidade
     const formatValue = (val) => {
-        if (val > 0) return `<span class="text-[#00ff88] text-xs">+${val}%</span>`;
-        if (val < 0) return `<span class="text-[#ff3366] text-xs">${val}%</span>`;
-        return `<span class="text-gray-400 text-xs">0.00%</span>`;
+        if (val > 0) return `<span class="text-[#00ff88]">+${val}%</span>`;
+        if (val < 0) return `<span class="text-[#ff3366]">${val}%</span>`;
+        return `<span class="text-gray-400">0.00%</span>`;
     };
 
     // Formata valor para "Desde o Início" (números grandes)
@@ -66,10 +66,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Formata a volatilidade
     const formatVolatilidade = (vol) => {
         if (vol === null || vol === undefined || isNaN(vol)) {
-            return `<span class="vol-badge"><span class="vol-dot"></span>Vol: s/ dados</span>`;
+            return `<span class="vol-badge"><span class="vol-dot"></span>s/ dados</span>`;
         }
 
-        return `<span class="vol-badge"><span class="vol-dot"></span>Vol: ${vol.toFixed(2)}%</span>`;
+        return `<span class="vol-badge"><span class="vol-dot"></span>${vol.toFixed(2)}%</span>`;
     };
     // Debounce function
     function debounce(func, timeout = 300){
@@ -159,8 +159,28 @@ document.addEventListener("DOMContentLoaded", () => {
     // 4. PERÍODOS
     // ==========================================
 
+    // Duração em meses entre data_inicial e data_final. "Desde o Início"
+    // recebe Infinity para sempre ficar por último na ordenação, já que sua
+    // duração real varia por fundo (não é um período fixo como os outros).
+    function duracaoEmMeses(periodo) {
+        if (periodo.tipo === 'desde_inicio') return Infinity;
+        if (!periodo.data_inicial || !periodo.data_final) return Infinity;
+
+        const inicio = new Date(periodo.data_inicial + 'T00:00:00');
+        const fim = new Date(periodo.data_final + 'T00:00:00');
+        return (fim.getFullYear() - inicio.getFullYear()) * 12
+            + (fim.getMonth() - inicio.getMonth());
+    }
+
+    // Ordena os períodos selecionados por duração crescente (meses),
+    // deixando "Desde o Início" sempre no final.
+    function ordenarPeriodosSelecionados() {
+        periodosSelecionados.sort((a, b) => duracaoEmMeses(a) - duracaoEmMeses(b));
+    }
+
     // Renderizar chips de períodos
     const renderPeriodosChips = () => {
+        ordenarPeriodosSelecionados();
         divPeriodos.innerHTML = '';
         periodosSelecionados.forEach((p, idx) => {
             const chip = document.createElement('div');
@@ -451,19 +471,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 const celulasRentabilidade = PERIODOS_RANKING.map(periodo => `
                     <td class="px-4 py-4 text-right" data-periodo="${periodo}">
                         <div class="metric-cell">
-                            <span class="rentabilidade text-xs font-medium">${formatValue(fundo['rentabilidade_' + periodo])}</span>
+                            <span class="rentabilidade text-[10px] font-medium">${formatValue(fundo['rentabilidade_' + periodo])}</span>
                             <span class="vol-slot"></span>
                         </div>
                     </td>`).join('');
 
                 linha.innerHTML = `
-                    <td class="px-4 py-4 text-neon font-semibold">${indice + 1}</td>
+                    <td class="px-4 py-4 text-neon font-semibold text-xs">${indice + 1}</td>
                     <td class="px-4 py-4 text-gray-200">
-                        <div class="truncate max-w-[250px] text-xs font-medium" title="${fundo.nome}">${fundo.nome}</div>
-                        <div class="text-xs text-gray-500">${fundo.cnpj}</div>
+                        <div class="truncate max-w-[200px] text-xs font-medium" title="${fundo.nome}">${fundo.nome}</div>
+                        <div class="text-[10px] text-gray-500">${fundo.cnpj}</div>
                     </td>
                     ${celulasRentabilidade}
-                    <td class="px-4 py-4 text-xs font-bold">${fundo.nota_final.toFixed(2)}</td>
+                    <td class="px-4 py-4 text-right font-bold text-[10px]">${fundo.nota_final.toFixed(4)}</td>
                     <td class="px-4 py-4 text-center">
                         <button
                             class="btn-vol-fundo bg-white/5 hover:bg-neon/10 text-gray-300 hover:text-neon border border-white/10 rounded-lg px-3 py-1.5 text-xs whitespace-nowrap transition-colors"
@@ -526,7 +546,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
 
-            botao.innerHTML = '<i class="ph ph-check-circle"></i> Calculada';
+            botao.innerHTML = '<i class="ph ph-check-circle"></i> Volatilidade calculada';
             botao.classList.remove('opacity-60', 'cursor-wait');
         } catch (erro) {
             alert('Erro ao calcular volatilidade do fundo.');

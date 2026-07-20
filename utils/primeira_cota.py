@@ -1,9 +1,19 @@
 import io
+import sys
 import zipfile
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 import requests
+
+# Garante que a raiz do projeto (pasta que contém services/ e utils/) esteja
+# no sys.path, independente de onde o script é executado. Sem isso, rodar
+# "python .\utils\primeira_cota.py" de dentro de utils/ quebra o import de
+# "services", pois o Python só teria utils/ no path, não a raiz do projeto.
+RAIZ_PROJETO = Path(__file__).resolve().parent.parent
+if str(RAIZ_PROJETO) not in sys.path:
+    sys.path.insert(0, str(RAIZ_PROJETO))
 
 from services.nome_fundo import carregar_depara_fundos
 
@@ -231,3 +241,20 @@ def primeira_cota_fundos(df_validos):
         .sort_values("DT_COMPTC")
         .reset_index(drop=True)
     )
+
+
+if __name__ == "__main__":
+    # Permite rodar o script diretamente para gerar o cache de primeiras
+    # cotas (ex: python .\utils\primeira_cota.py), agora que services/ está
+    # garantidamente no sys.path.
+    import os
+
+    validos = fundos_validos_junho_2026()
+    df_primeiras = primeira_cota_fundos(validos)
+
+    caminho_saida = RAIZ_PROJETO / "cache" / "primeiras_cotas.parquet"
+    caminho_saida.parent.mkdir(parents=True, exist_ok=True)
+    df_primeiras.to_parquet(caminho_saida, index=False)
+
+    print(df_primeiras)
+    print(f"\n✅ Salvo em: {caminho_saida}")

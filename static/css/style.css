@@ -143,12 +143,11 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 
 .metric-cell .rentabilidade {
     display: block;
-    font-size: 1.15rem;
-    font-weight: 700;
+    font-size: 0.7rem;
+    font-weight: 200;
     line-height: 1;
     text-align: center;
 }
-
 /* Badge de volatilidade: pill discreta, cor indica a faixa de risco (não bom/ruim) */
 .vol-badge {
     display: inline-flex;
