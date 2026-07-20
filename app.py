@@ -3,13 +3,15 @@ from flask import Flask, render_template, request, jsonify
 from services.nome_fundo import carregar_depara_fundos
 from services.fundos_service import (
     processar_variacao_fundo,
-    processar_comparacao_fundos
+    processar_comparacao_fundos,
+    gerar_ranking_fundos,
 )
 from utils.validacoes import (
     validar_dados_variacao,
     validar_dados_comparacao,
     gerar_todos_periodos,
-    obter_ultimo_mes_completo
+    obter_ultimo_mes_completo,
+    obter_data_referencia,
 )
 
 app = Flask(__name__)
@@ -99,6 +101,33 @@ def comparar_fundos():
     )
     
     return jsonify(resultado)
+
+
+@app.get("/api/fundos/ranking")
+def ranking_fundos():
+    """Retorna os melhores fundos com base nos cinco períodos padrão."""
+    try:
+        top_n = int(request.args.get("top_n", 50))
+    except ValueError:
+        return jsonify({"erro": "top_n deve ser um número inteiro"}), 400
+
+    if top_n < 1:
+        return jsonify({"erro": "top_n deve ser maior que zero"}), 400
+
+    data_referencia = request.args.get("data_referencia")
+    try:
+        ranking = gerar_ranking_fundos(
+            fundos=df_fundos,
+            top_n=top_n,
+            data_referencia=data_referencia,
+        )
+    except (ValueError, TypeError) as erro:
+        return jsonify({"erro": str(erro)}), 400
+
+    return jsonify({
+        "data_referencia": data_referencia or obter_data_referencia().strftime("%Y-%m-%d"),
+        "fundos": ranking,
+    })
 
 
 if __name__ == "__main__":

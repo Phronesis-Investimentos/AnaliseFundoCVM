@@ -1,12 +1,139 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Iterable, Optional
 import pandas as pd
 from services.cvm import (
     carregar_historico_fundo,
+    carregar_cotas_referencia_fundos,
+    carregar_fundos_elegiveis_por_cotistas,
     calcular_variacao_periodo,
     filtrar_periodo
 )
+
+from services.nome_fundo import carregar_depara_fundos
 from services.volatilidade import calcular_volatilidade_periodo
 from utils.formatadores import formatar_cnpj
+from utils.validacoes import gerar_periodos_padrao, obter_ultimo_mes_completo
+
+
+PESOS_RANKING_PADRAO = {
+    "12m": 0.10,
+    "24m": 0.15,
+    "36m": 0.50,
+    "48m": 0.15,
+    "60m": 0.10,
+}
+
+
+def _periodos_ranking(data_referencia: Optional[str] = None) -> Dict[str, Dict[str, str]]:
+    """Mapeia os períodos padrão para as chaves usadas pelo ranking."""
+    return {
+        f"{indice * 12}m": periodo
+        for indice, periodo in enumerate(gerar_periodos_padrao(data_referencia), start=1)
+    }
+
+
+def _possui_cotas_referencia(
+    df: pd.DataFrame,
+    periodos: Iterable[Dict[str, str]]
+) -> bool:
+    """Exige uma cota de fechamento em cada mês inicial e final."""
+    if df.empty:
+        return False
+
+    cotas = pd.to_numeric(df["VL_QUOTA"], errors="coerce")
+    # Cota nula, negativa ou ausente torna a rentabilidade indefinida.
+    if cotas.isna().any() or (cotas <= 0).any():
+        return False
+
+    meses_disponiveis = set(df["DT_COMPTC"].dt.to_period("M"))
+    for periodo in periodos:
+        inicio = pd.Period(periodo["data_inicial"], freq="M")
+        fim = pd.Period(periodo["data_final"], freq="M")
+        if inicio not in meses_disponiveis or fim not in meses_disponiveis:
+            return False
+    return True
+
+
+def gerar_ranking_fundos(
+    pesos: Optional[Dict[str, float]] = None,
+    top_n: int = 50,
+    fundos: Optional[pd.DataFrame] = None,
+    data_referencia: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Gera o ranking de fundos pela média ponderada de rentabilidades.
+
+    Fundos sem cotas de fechamento para *todos* os cinco períodos são
+    excluídos. Antes dos cálculos, considera somente CNPJs únicos com mais
+    de 10 cotistas no último mês completo. Como o ranking considera somente
+    rentabilidade, são lidos apenas os cinco meses iniciais e o mês final.
+    """
+    if fundos is None:
+
+        fundos = carregar_depara_fundos()
+
+    if top_n <= 0:
+        return []
+    if fundos.empty:
+        return []
+
+    pesos = PESOS_RANKING_PADRAO if pesos is None else pesos
+    chaves_esperadas = set(PESOS_RANKING_PADRAO)
+    if set(pesos) != chaves_esperadas:
+        raise ValueError("Os pesos devem conter exatamente: 12m, 24m, 36m, 48m e 60m")
+    if any(peso < 0 for peso in pesos.values()):
+        raise ValueError("Os pesos não podem ser negativos")
+    if abs(sum(pesos.values()) - 1) > 1e-9:
+        raise ValueError("A soma dos pesos deve ser igual a 1")
+
+    periodos = _periodos_ranking(data_referencia)
+    cadastro = fundos[["CNPJ_FUNDO", "DENOM_SOCIAL"]].dropna().drop_duplicates("CNPJ_FUNDO")
+
+    ano_elegibilidade, mes_elegibilidade = map(int, obter_ultimo_mes_completo().split("-"))
+    elegiveis = carregar_fundos_elegiveis_por_cotistas(
+        ano_elegibilidade, mes_elegibilidade
+    )
+    cadastro = cadastro[cadastro["CNPJ_FUNDO"].isin(elegiveis["CNPJ_FUNDO"])]
+    if cadastro.empty:
+        return []
+
+    datas_referencia = [periodo["data_inicial"] for periodo in periodos.values()]
+    datas_referencia.append(periodos["60m"]["data_final"])
+    cotas_referencia = carregar_cotas_referencia_fundos(
+        cadastro["CNPJ_FUNDO"].tolist(), datas_referencia
+    )
+    if cotas_referencia.empty:
+        return []
+    cotas_referencia = cotas_referencia.copy()
+    cotas_referencia["DT_COMPTC"] = pd.to_datetime(cotas_referencia["DT_COMPTC"])
+
+    resultados = []
+    nomes_por_cnpj = cadastro.set_index("CNPJ_FUNDO")["DENOM_SOCIAL"]
+    for cnpj, df_fundo in cotas_referencia.groupby("CNPJ_FUNDO", sort=False):
+        if not _possui_cotas_referencia(df_fundo, periodos.values()):
+            continue
+
+        registro = {"nome": nomes_por_cnpj.get(cnpj, cnpj), "cnpj": cnpj}
+        nota = 0.0
+        for chave, periodo in periodos.items():
+            meses_periodo = {
+                pd.Period(periodo["data_inicial"], freq="M"),
+                pd.Period(periodo["data_final"], freq="M"),
+            }
+            df_periodo = filtrar_periodo(
+                df_fundo[df_fundo["DT_COMPTC"].dt.to_period("M").isin(meses_periodo)],
+                periodo["data_inicial"], periodo["data_final"],
+            )
+            rentabilidade = calcular_variacao_periodo(df_periodo)
+            registro[f"rentabilidade_{chave}"] = float(round(rentabilidade, 2))
+            nota += (rentabilidade / 100) * pesos[chave]
+
+        registro["_nota_ordenacao"] = float(nota)
+        registro["nota_final"] = float(round(nota, 2))
+        resultados.append(registro)
+
+    resultados.sort(key=lambda registro: registro["_nota_ordenacao"], reverse=True)
+    for registro in resultados:
+        registro.pop("_nota_ordenacao")
+    return resultados[:top_n]
 
 
 def processar_variacao_fundo(

@@ -383,6 +383,10 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             // Atualiza subtítulo com contagem de fundos/períodos
+            const titulo = document.getElementById('modal_titulo');
+            if (titulo) {
+                titulo.textContent = 'Resultado da Comparação';
+            }
             const subtitulo = document.getElementById('modal_subtitulo');
             if (subtitulo) {
                 subtitulo.textContent = `${data.fundos.length} fundo(s) · ${data.periodos.length} período(s)`;
@@ -399,7 +403,67 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // ==========================================
-    // 7. MODAL DE RESULTADO (Tela Full-Screen)
+    // 7. RANKING TOP 50
+    // ==========================================
+
+    document.getElementById('btn_gerar_ranking').addEventListener('click', async () => {
+        showLoader();
+        try {
+            const res = await fetch('/api/fundos/ranking?top_n=50');
+            const data = await res.json();
+
+            if (!res.ok || data.erro) {
+                alert(data.erro || 'Não foi possível gerar o ranking.');
+                return;
+            }
+
+            const thead = document.getElementById('tabela_comparacao_head');
+            const tbody = document.getElementById('tabela_comparacao_body');
+            const titulo = document.getElementById('modal_titulo');
+            const subtitulo = document.getElementById('modal_subtitulo');
+
+            thead.innerHTML = `
+                <th class="px-4 py-3 font-medium text-gray-400">#</th>
+                <th class="px-4 py-3 font-medium text-gray-400">Fundo</th>
+                <th class="px-4 py-3 font-medium text-gray-400 text-right">12m</th>
+                <th class="px-4 py-3 font-medium text-gray-400 text-right">24m</th>
+                <th class="px-4 py-3 font-medium text-gray-400 text-right">36m</th>
+                <th class="px-4 py-3 font-medium text-gray-400 text-right">48m</th>
+                <th class="px-4 py-3 font-medium text-gray-400 text-right">60m</th>
+                <th class="px-4 py-3 font-medium text-neon text-right">Nota</th>`;
+            tbody.innerHTML = '';
+
+            data.fundos.forEach((fundo, indice) => {
+                const linha = document.createElement('tr');
+                linha.className = 'border-b border-white/5 hover:bg-white/[0.02]';
+                linha.innerHTML = `
+                    <td class="px-4 py-4 text-neon font-semibold">${indice + 1}</td>
+                    <td class="px-4 py-4 text-gray-200">
+                        <div class="truncate max-w-[250px] font-medium" title="${fundo.nome}">${fundo.nome}</div>
+                        <div class="text-xs text-gray-500">${fundo.cnpj}</div>
+                    </td>
+                    <td class="px-4 py-4 text-right">${formatValue(fundo.rentabilidade_12m)}</td>
+                    <td class="px-4 py-4 text-right">${formatValue(fundo.rentabilidade_24m)}</td>
+                    <td class="px-4 py-4 text-right">${formatValue(fundo.rentabilidade_36m)}</td>
+                    <td class="px-4 py-4 text-right">${formatValue(fundo.rentabilidade_48m)}</td>
+                    <td class="px-4 py-4 text-right">${formatValue(fundo.rentabilidade_60m)}</td>
+                    <td class="px-4 py-4 text-right font-bold">${fundo.nota_final.toFixed(4)}</td>`;
+                tbody.appendChild(linha);
+            });
+
+            titulo.textContent = 'Ranking Top 50 de Fundos';
+            subtitulo.textContent = `${data.fundos.length} fundo(s) elegível(is) · Referência: ${data.data_referencia}`;
+            abrirModalResultado();
+        } catch (e) {
+            alert('Erro ao gerar o ranking.');
+            console.error(e);
+        } finally {
+            hideLoader();
+        }
+    });
+
+    // ==========================================
+    // 8. MODAL DE RESULTADO (Tela Full-Screen)
     // ==========================================
 
     const modalResultado = document.getElementById('modal_resultado');

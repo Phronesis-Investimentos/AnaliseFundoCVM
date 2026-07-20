@@ -75,21 +75,93 @@ def carregar_dataframe(ano: int, mes: int, cnpj: str) -> pd.DataFrame:
     Para anos > 2020: Baixa o arquivo mensal e faz cache por mês
     """
     
+    df_mes_completo = carregar_dataframe_mes_completo(ano, mes)
+    return df_mes_completo[
+        df_mes_completo["CNPJ_FUNDO"] == cnpj
+    ].reset_index(drop=True)
+
+
+def carregar_dataframe_mes_completo(ano: int, mes: int) -> pd.DataFrame:
+    """Carrega todas as cotas de um mês, usando o cache local quando possível.
+
+    Esta função é usada em operações em lote, como o ranking. Assim, cada
+    arquivo mensal é lido uma vez, em vez de uma vez para cada fundo.
+    """
     caminho_cache = _caminho_cache_mes(ano, mes)
-    
-    # Se já temos em cache, retorna direto
     if os.path.exists(caminho_cache):
         print(f"Lendo do cache: {ano}-{mes:02d}")
-        df_mes_completo = pd.read_parquet(caminho_cache)
-        return df_mes_completo[
-            df_mes_completo["CNPJ_FUNDO"] == cnpj
-        ].reset_index(drop=True)
-    
-    # Determina a estratégia de download baseada no ano
+        return pd.read_parquet(caminho_cache)
+
     if ano <= 2020:
-        return _carregar_dados_historicos(ano, mes, cnpj)
+        # A função histórica também materializa o cache mensal.
+        _carregar_dados_historicos(ano, mes, cnpj="")
     else:
-        return _carregar_dados_recentes(ano, mes, cnpj)
+        _carregar_dados_recentes(ano, mes, cnpj="")
+
+    if os.path.exists(caminho_cache):
+        return pd.read_parquet(caminho_cache)
+
+    return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+
+
+def carregar_fundos_elegiveis_por_cotistas(
+    ano: int,
+    mes: int,
+    minimo_cotistas: int = 10,
+) -> pd.DataFrame:
+    """Retorna CNPJs únicos com mais que ``minimo_cotistas`` no mês informado.
+
+    O arquivo de elegibilidade é guardado separadamente porque os caches de
+    cotas armazenam somente data e valor da cota, sem a coluna ``NR_COTST``.
+    """
+    caminho_cache = f"cache/elegiveis_{ano}{mes:02d}.parquet"
+    if os.path.exists(caminho_cache):
+        return pd.read_parquet(caminho_cache)
+
+    arquivo = f"inf_diario_fi_{ano}{mes:02d}.zip"
+    try:
+        response = session.get(f"{URL_BASE}/{arquivo}", timeout=(10, 300))
+        response.raise_for_status()
+    except requests.RequestException as erro:
+        print(f"Erro ao baixar elegibilidade de {ano}-{mes:02d}: {erro}")
+        return pd.DataFrame(columns=["CNPJ_FUNDO", "NR_COTST"])
+
+    with zipfile.ZipFile(io.BytesIO(response.content)) as zip_file:
+        with zip_file.open(zip_file.namelist()[0]) as csv:
+            cabecalho = pd.read_csv(csv, sep=";", encoding="latin1", nrows=0)
+            if "CNPJ_FUNDO" in cabecalho.columns:
+                coluna_cnpj = "CNPJ_FUNDO"
+            elif "CNPJ_FUNDO_CLASSE" in cabecalho.columns:
+                coluna_cnpj = "CNPJ_FUNDO_CLASSE"
+            else:
+                raise ValueError("Coluna de CNPJ não encontrada.")
+
+            csv.seek(0)
+            partes = []
+            for chunk in pd.read_csv(
+                csv,
+                sep=";",
+                encoding="latin1",
+                usecols=[coluna_cnpj, "NR_COTST"],
+                chunksize=100000,
+            ):
+                chunk["NR_COTST"] = pd.to_numeric(chunk["NR_COTST"], errors="coerce")
+                partes.append(chunk.groupby(coluna_cnpj, as_index=False)["NR_COTST"].max())
+
+    if not partes:
+        return pd.DataFrame(columns=["CNPJ_FUNDO", "NR_COTST"])
+
+    elegiveis = (
+        pd.concat(partes, ignore_index=True)
+        .groupby(coluna_cnpj, as_index=False)["NR_COTST"].max()
+        .rename(columns={coluna_cnpj: "CNPJ_FUNDO"})
+    )
+    elegiveis["CNPJ_FUNDO"] = elegiveis["CNPJ_FUNDO"].astype(str).str.strip()
+    elegiveis = elegiveis[elegiveis["NR_COTST"] > minimo_cotistas].reset_index(drop=True)
+
+    os.makedirs("cache", exist_ok=True)
+    elegiveis.to_parquet(caminho_cache, index=False)
+    return elegiveis
 
 
 def _carregar_dados_recentes(ano: int, mes: int, cnpj: str) -> pd.DataFrame:
@@ -506,3 +578,85 @@ def carregar_desde_inicio(cnpj: str, data_final: str) -> pd.DataFrame:
     print(f"✅ Total de {len(df_completo)} registros carregados")
     
     return df_completo
+
+
+def carregar_historico_fundos(
+    cnpjs,
+    data_inicial: str,
+    data_final: str
+) -> pd.DataFrame:
+    """Carrega em lote o histórico de vários fundos.
+
+    Os arquivos mensais da CVM são lidos uma única vez e filtrados para os
+    CNPJs solicitados. Para o ranking isso elimina a leitura repetida dos
+    mesmos 60 arquivos para cada fundo.
+    """
+    cnpjs = set(cnpjs)
+    if not cnpjs:
+        return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+
+    inicio = pd.to_datetime(data_inicial)
+    fim = pd.to_datetime(data_final)
+    datas_mensais = pd.date_range(
+        start=inicio.replace(day=1),
+        end=fim.replace(day=1),
+        freq="MS"
+    )
+
+    partes = []
+    for data_mes in datas_mensais:
+        try:
+            df_mes = carregar_dataframe_mes_completo(data_mes.year, data_mes.month)
+            df_mes = df_mes[df_mes["CNPJ_FUNDO"].isin(cnpjs)]
+            if not df_mes.empty:
+                partes.append(df_mes)
+        except Exception as erro:
+            print(f"Erro ao carregar {data_mes.year}-{data_mes.month:02d}: {erro}")
+
+    if not partes:
+        return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+
+    return (
+        pd.concat(partes, ignore_index=True)
+        .drop_duplicates(subset=["CNPJ_FUNDO", "DT_COMPTC"])
+        .sort_values(["CNPJ_FUNDO", "DT_COMPTC"])
+        .reset_index(drop=True)
+    )
+
+
+def carregar_cotas_referencia_fundos(cnpjs, datas_referencia) -> pd.DataFrame:
+    """Carrega somente os fechamentos mensais necessários para rentabilidade.
+
+    Para cada mês de referência, lê o arquivo da CVM uma vez e mantém a
+    última cota mensal de cada CNPJ solicitado. É apropriada quando não há
+    métricas, como volatilidade, que dependam do histórico diário completo.
+    """
+    cnpjs = set(cnpjs)
+    meses = pd.PeriodIndex(pd.to_datetime(list(datas_referencia)), freq="M").unique()
+    if not cnpjs or meses.empty:
+        return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+
+    partes = []
+    for mes in meses:
+        try:
+            df_mes = carregar_dataframe_mes_completo(mes.year, mes.month)
+            cotas = df_mes[df_mes["CNPJ_FUNDO"].isin(cnpjs)].copy()
+            if not cotas.empty:
+                cotas["DT_COMPTC"] = pd.to_datetime(cotas["DT_COMPTC"])
+                partes.append(
+                    cotas.sort_values("DT_COMPTC")
+                    .groupby("CNPJ_FUNDO", as_index=False)
+                    .last()
+                )
+        except Exception as erro:
+            print(f"Erro ao carregar {mes.year}-{mes.month:02d}: {erro}")
+
+    if not partes:
+        return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+
+    return (
+        pd.concat(partes, ignore_index=True)
+        .drop_duplicates(subset=["CNPJ_FUNDO", "DT_COMPTC"])
+        .sort_values(["CNPJ_FUNDO", "DT_COMPTC"])
+        .reset_index(drop=True)
+    )
