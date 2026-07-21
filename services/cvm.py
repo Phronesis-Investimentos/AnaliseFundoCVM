@@ -20,18 +20,6 @@ def _caminho_cache_ano(ano: int) -> str:
     return f"cache/hist_{ano}.parquet"
 
 
-def _eh_mes_atual(ano: int, mes: int) -> bool:
-    """Indica se (ano, mes) é o mês corrente.
-
-    O arquivo mensal do mês corrente é atualizado pela CVM diariamente
-    (novas cotas entram até o fechamento do mês), então ele NUNCA pode ser
-    lido nem gravado no cache em disco — sempre precisa ser baixado de novo
-    para refletir a cota mais recente disponível.
-    """
-    hoje = datetime.today()
-    return ano == hoje.year and mes == hoje.month
-
-
 def _processar_csv(csv_file) -> pd.DataFrame:
     """
     Processa o arquivo CSV (funciona tanto para mensal quanto anual)
@@ -98,31 +86,22 @@ def carregar_dataframe_mes_completo(ano: int, mes: int) -> pd.DataFrame:
 
     Esta função é usada em operações em lote, como o ranking. Assim, cada
     arquivo mensal é lido uma vez, em vez de uma vez para cada fundo.
-
-    O mês corrente nunca usa o cache (nem leitura, nem gravação): a CVM
-    atualiza o arquivo mensal diariamente, então servir do cache faria a
-    última cota ficar presa no dia em que o arquivo foi baixado pela
-    primeira vez naquele mês.
     """
-    mes_atual = _eh_mes_atual(ano, mes)
     caminho_cache = _caminho_cache_mes(ano, mes)
-
-    if not mes_atual and os.path.exists(caminho_cache):
+    if os.path.exists(caminho_cache):
         print(f"Lendo do cache: {ano}-{mes:02d}")
         return pd.read_parquet(caminho_cache)
 
     if ano <= 2020:
-        # Anos <= 2020 nunca são o mês corrente (são sempre passado), então
-        # a função histórica pode seguir materializando o cache mensal.
+        # A função histórica também materializa o cache mensal.
         _carregar_dados_historicos(ano, mes, cnpj="")
-        if os.path.exists(caminho_cache):
-            return pd.read_parquet(caminho_cache)
-        return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+    else:
+        _carregar_dados_recentes(ano, mes, cnpj="")
 
-    if mes_atual:
-        print(f"Mês corrente ({ano}-{mes:02d}): baixando direto, sem usar cache")
+    if os.path.exists(caminho_cache):
+        return pd.read_parquet(caminho_cache)
 
-    return _carregar_dados_recentes(ano, mes, cnpj="", usar_cache=not mes_atual)
+    return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
 
 
 def carregar_fundos_elegiveis_por_cotistas(
@@ -134,11 +113,9 @@ def carregar_fundos_elegiveis_por_cotistas(
 
     O arquivo de elegibilidade é guardado separadamente porque os caches de
     cotas armazenam somente data e valor da cota, sem a coluna ``NR_COTST``.
-    Assim como as cotas, o mês corrente nunca é lido nem gravado em cache.
     """
-    mes_atual = _eh_mes_atual(ano, mes)
     caminho_cache = f"cache/elegiveis_{ano}{mes:02d}.parquet"
-    if not mes_atual and os.path.exists(caminho_cache):
+    if os.path.exists(caminho_cache):
         return pd.read_parquet(caminho_cache)
 
     arquivo = f"inf_diario_fi_{ano}{mes:02d}.zip"
@@ -182,19 +159,14 @@ def carregar_fundos_elegiveis_por_cotistas(
     elegiveis["CNPJ_FUNDO"] = elegiveis["CNPJ_FUNDO"].astype(str).str.strip()
     elegiveis = elegiveis[elegiveis["NR_COTST"] > minimo_cotistas].reset_index(drop=True)
 
-    if not mes_atual:
-        os.makedirs("cache", exist_ok=True)
-        elegiveis.to_parquet(caminho_cache, index=False)
+    os.makedirs("cache", exist_ok=True)
+    elegiveis.to_parquet(caminho_cache, index=False)
     return elegiveis
 
 
-def _carregar_dados_recentes(ano: int, mes: int, cnpj: str, usar_cache: bool = True) -> pd.DataFrame:
+def _carregar_dados_recentes(ano: int, mes: int, cnpj: str) -> pd.DataFrame:
     """
-    Carrega dados de anos > 2020 (formato mensal).
-
-    usar_cache=False é usado para o mês corrente: os dados são baixados na
-    hora e NÃO são gravados no cache em disco, já que o arquivo da CVM
-    daquele mês ainda vai receber cotas novas nos próximos dias.
+    Carrega dados de anos > 2020 (formato mensal)
     """
     caminho_cache = _caminho_cache_mes(ano, mes)
     arquivo = f"inf_diario_fi_{ano}{mes:02d}.zip"
@@ -215,14 +187,10 @@ def _carregar_dados_recentes(ano: int, mes: int, cnpj: str, usar_cache: bool = T
         with zip_file.open(nome_csv) as csv:
             df_mes_completo = _processar_csv(csv)
     
-    if usar_cache:
-        # Salva cache mensal (apenas para meses fechados, nunca o corrente)
-        os.makedirs("cache", exist_ok=True)
-        df_mes_completo.to_parquet(caminho_cache, index=False)
-
-    if not cnpj:
-        return df_mes_completo
-
+    # Salva cache mensal
+    os.makedirs("cache", exist_ok=True)
+    df_mes_completo.to_parquet(caminho_cache, index=False)
+    
     return df_mes_completo[
         df_mes_completo["CNPJ_FUNDO"] == cnpj
     ].reset_index(drop=True)
@@ -389,6 +357,8 @@ def encontrar_primeira_cota(cnpj: str) -> pd.DataFrame:
     Returns:
         DataFrame com a primeira cota encontrada
     """
+    from datetime import datetime
+    
     ano_atual = datetime.today().year
     
     print(f"\n=== BUSCANDO PRIMEIRA COTA DO FUNDO {cnpj} ===")

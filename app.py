@@ -115,18 +115,22 @@ def ranking_fundos():
     if top_n < 1:
         return jsonify({"erro": "top_n deve ser maior que zero"}), 400
 
+    categoria = request.args.get("categoria", "todos")
+
     data_referencia = request.args.get("data_referencia")
     try:
         ranking = gerar_ranking_fundos(
             fundos=df_fundos,
             top_n=top_n,
             data_referencia=data_referencia,
+            categoria=categoria,
         )
     except (ValueError, TypeError) as erro:
         return jsonify({"erro": str(erro)}), 400
 
     return jsonify({
         "data_referencia": data_referencia or obter_data_referencia().strftime("%Y-%m-%d"),
+        "categoria": categoria,
         "fundos": ranking,
     })
 

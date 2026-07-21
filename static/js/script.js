@@ -423,88 +423,113 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // ==========================================
-    // 7. RANKING TOP 50
+    // 7. RANKING TOP
     // ==========================================
 
     // Guarda a data de referência do último ranking gerado, para que o
     // cálculo de volatilidade de cada fundo use os mesmos períodos.
-    let dataReferenciaRankingAtual = null;
+// ==========================================
+// 7. RANKING (quantidade e categoria configuráveis)
+// ==========================================
 
-    const PERIODOS_RANKING = ['12m', '24m', '36m', '48m', '60m'];
+let dataReferenciaRankingAtual = null;
 
-    document.getElementById('btn_gerar_ranking').addEventListener('click', async () => {
-        showLoader();
-        try {
-            const res = await fetch('/api/fundos/ranking?top_n=50');
-            const data = await res.json();
+const PERIODOS_RANKING = ['12m', '24m', '36m', '48m', '60m'];
 
-            if (!res.ok || data.erro) {
-                alert(data.erro || 'Não foi possível gerar o ranking.');
-                return;
-            }
+const ROTULOS_CATEGORIA = {
+    todos: 'Todos',
+    acoes: 'Ações',
+    multimercado: 'Multimercado',
+};
 
-            const thead = document.getElementById('tabela_comparacao_head');
-            const tbody = document.getElementById('tabela_comparacao_body');
-            const titulo = document.getElementById('modal_titulo');
-            const subtitulo = document.getElementById('modal_subtitulo');
+document.getElementById('btn_gerar_ranking').addEventListener('click', async () => {
+    const inputQuantidade = document.getElementById('ranking_quantidade');
+    const selectCategoria = document.getElementById('ranking_categoria');
 
-            thead.innerHTML = `
-                <th class="px-4 py-3 font-medium text-gray-400">#</th>
-                <th class="px-4 py-3 font-medium text-gray-400">Fundo</th>
-                <th class="px-4 py-3 font-medium text-gray-400 text-right">12m</th>
-                <th class="px-4 py-3 font-medium text-gray-400 text-right">24m</th>
-                <th class="px-4 py-3 font-medium text-gray-400 text-right">36m</th>
-                <th class="px-4 py-3 font-medium text-gray-400 text-right">48m</th>
-                <th class="px-4 py-3 font-medium text-gray-400 text-right">60m</th>
-                <th class="px-4 py-3 font-medium text-neon text-right">Nota</th>
-                <th class="px-4 py-3 font-medium text-gray-400 text-center">Volatilidade</th>`;
-            tbody.innerHTML = '';
+    const quantidade = inputQuantidade ? parseInt(inputQuantidade.value, 10) : 50;
+    const categoria = selectCategoria ? selectCategoria.value : 'todos';
 
-            dataReferenciaRankingAtual = data.data_referencia;
+    if (!quantidade || quantidade < 1) {
+        alert('Informe uma quantidade válida de fundos.');
+        return;
+    }
 
-            data.fundos.forEach((fundo, indice) => {
-                const linha = document.createElement('tr');
-                linha.className = 'border-b border-white/5 hover:bg-white/[0.02]';
+    showLoader();
+    try {
+        const params = new URLSearchParams({
+            top_n: quantidade,
+            categoria: categoria,
+        });
 
-                // Uma célula por período, com um slot vazio para o badge de
-                // volatilidade que será preenchido ao clicar no botão.
-                const celulasRentabilidade = PERIODOS_RANKING.map(periodo => `
-                    <td class="px-4 py-4 text-right" data-periodo="${periodo}">
-                        <div class="metric-cell">
-                            <span class="rentabilidade text-[10px] font-medium">${formatValue(fundo['rentabilidade_' + periodo])}</span>
-                            <span class="vol-slot"></span>
-                        </div>
-                    </td>`).join('');
+        const res = await fetch(`/api/fundos/ranking?${params.toString()}`);
+        const data = await res.json();
 
-                linha.innerHTML = `
-                    <td class="px-4 py-4 text-neon font-semibold text-xs">${indice + 1}</td>
-                    <td class="px-4 py-4 text-gray-200">
-                        <div class="truncate max-w-[200px] text-xs font-medium" title="${fundo.nome}">${fundo.nome}</div>
-                        <div class="text-[10px] text-gray-500">${fundo.cnpj}</div>
-                    </td>
-                    ${celulasRentabilidade}
-                    <td class="px-4 py-4 text-right font-bold text-[10px]">${fundo.nota_final.toFixed(4)}</td>
-                    <td class="px-4 py-4 text-center">
-                        <button
-                            class="btn-vol-fundo bg-white/5 hover:bg-neon/10 text-gray-300 hover:text-neon border border-white/10 rounded-lg px-3 py-1.5 text-xs whitespace-nowrap transition-colors"
-                            data-cnpj="${fundo.cnpj}"
-                        >
-                            <i class="ph ph-chart-line-up"></i> Ver Volatilidade
-                        </button>
-                    </td>`;
-                tbody.appendChild(linha);
-            });
-
-            titulo.textContent = 'Ranking Top 50 de Fundos';
-            subtitulo.textContent = `${data.fundos.length} fundo(s) elegível(is) · Referência: ${data.data_referencia}`;
-            abrirModalResultado();
-        } catch (e) {
-            alert('Erro ao gerar o ranking.');
-            console.error(e);
-        } finally {
-            hideLoader();
+        if (!res.ok || data.erro) {
+            alert(data.erro || 'Não foi possível gerar o ranking.');
+            return;
         }
-    });
+
+        const thead = document.getElementById('tabela_comparacao_head');
+        const tbody = document.getElementById('tabela_comparacao_body');
+        const titulo = document.getElementById('modal_titulo');
+        const subtitulo = document.getElementById('modal_subtitulo');
+
+        thead.innerHTML = `
+            <th class="px-4 py-3 font-medium text-gray-400">#</th>
+            <th class="px-4 py-3 font-medium text-gray-400">Fundo</th>
+            <th class="px-4 py-3 font-medium text-gray-400 text-right">12m</th>
+            <th class="px-4 py-3 font-medium text-gray-400 text-right">24m</th>
+            <th class="px-4 py-3 font-medium text-gray-400 text-right">36m</th>
+            <th class="px-4 py-3 font-medium text-gray-400 text-right">48m</th>
+            <th class="px-4 py-3 font-medium text-gray-400 text-right">60m</th>
+            <th class="px-4 py-3 font-medium text-neon text-right">Nota</th>
+            <th class="px-4 py-3 font-medium text-gray-400 text-center">Volatilidade</th>`;
+        tbody.innerHTML = '';
+
+        dataReferenciaRankingAtual = data.data_referencia;
+
+        data.fundos.forEach((fundo, indice) => {
+            const linha = document.createElement('tr');
+            linha.className = 'border-b border-white/5 hover:bg-white/[0.02]';
+
+            const celulasRentabilidade = PERIODOS_RANKING.map(periodo => `
+                <td class="px-4 py-4 text-right" data-periodo="${periodo}">
+                    <div class="metric-cell">
+                        <span class="rentabilidade text-[10px] font-medium">${formatValue(fundo['rentabilidade_' + periodo])}</span>
+                        <span class="vol-slot"></span>
+                    </div>
+                </td>`).join('');
+
+            linha.innerHTML = `
+                <td class="px-4 py-4 text-neon font-semibold text-xs">${indice + 1}</td>
+                <td class="px-4 py-4 text-gray-200">
+                    <div class="truncate max-w-[200px] text-xs font-medium" title="${fundo.nome}">${fundo.nome}</div>
+                    <div class="text-[10px] text-gray-500">${fundo.cnpj}</div>
+                </td>
+                ${celulasRentabilidade}
+                <td class="px-4 py-4 text-right font-bold text-[10px]">${fundo.nota_final.toFixed(4)}</td>
+                <td class="px-4 py-4 text-center">
+                    <button
+                        class="btn-vol-fundo bg-white/5 hover:bg-neon/10 text-gray-300 hover:text-neon border border-white/10 rounded-lg px-3 py-1.5 text-xs whitespace-nowrap transition-colors"
+                        data-cnpj="${fundo.cnpj}"
+                    >
+                        <i class="ph ph-chart-line-up"></i> Ver Volatilidade
+                    </button>
+                </td>`;
+            tbody.appendChild(linha);
+        });
+
+        const rotuloCategoria = ROTULOS_CATEGORIA[data.categoria] || data.categoria;
+        titulo.textContent = `Ranking Top ${data.fundos.length} de Fundos`;
+        subtitulo.textContent = `${data.fundos.length} fundo(s) elegível(is) · Categoria: ${rotuloCategoria} · Referência: ${data.data_referencia}`;
+        abrirModalResultado();
+    } catch (e) {
+        alert('Erro ao gerar o ranking.');
+        console.error(e);
+    } finally {
+        hideLoader();
+    }
+});
 
     // Delegação de evento: as linhas do ranking são recriadas a cada
     // geração, então o listener fica no tbody (que é fixo) em vez de em

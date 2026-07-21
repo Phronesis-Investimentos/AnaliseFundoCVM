@@ -118,9 +118,39 @@
 
                 <div class="pt-2 border-t border-white/5">
                     <p class="text-xs text-gray-500 mb-3">Analisa todos os fundos elegíveis pelos períodos de 12 a 60 meses.</p>
+
+                    <!-- Configurações do Ranking: quantidade e categoria -->
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label for="ranking_quantidade" class="block text-xs font-medium text-gray-400 mb-1.5">
+                                Quantidade de Fundos
+                            </label>
+                            <input
+                                type="number"
+                                id="ranking_quantidade"
+                                min="1"
+                                value="50"
+                                class="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-3 text-white text-sm focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all"
+                            >
+                        </div>
+                        <div>
+                            <label for="ranking_categoria" class="block text-xs font-medium text-gray-400 mb-1.5">
+                                Categoria
+                            </label>
+                            <select
+                                id="ranking_categoria"
+                                class="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-3 text-white text-sm focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all appearance-none"
+                            >
+                                <option value="todos">Todos</option>
+                                <option value="acoes">Ações</option>
+                                <option value="multimercado">Multimercado</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <button id="btn_gerar_ranking" class="w-full py-3 bg-neon/10 text-neon font-semibold rounded-xl hover:bg-neon hover:text-black transition-all duration-300 border border-neon/30 magnetic-btn flex justify-center items-center gap-2">
                         <i class="ph ph-trophy text-lg"></i>
-                        <span>Gerar Ranking Top 50</span>
+                        <span>Gerar Ranking</span>
                     </button>
                 </div>
             </div>

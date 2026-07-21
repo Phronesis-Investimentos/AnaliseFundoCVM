@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Iterable, Optional
 import pandas as pd
+import unicodedata
 from services.cvm import (
     carregar_historico_fundo,
     carregar_cotas_referencia_fundos,
@@ -22,6 +23,44 @@ PESOS_RANKING_PADRAO = {
     "60m": 0.10,
 }
 
+COLUNA_CLASSE = "Classificacao"
+
+CATEGORIAS_RANKING = {
+    "acoes": "Ações",
+    "multimercado": "Multimercado",
+}
+
+
+def _normalizar_texto(texto: Any) -> str:
+    """Remove acentuação e normaliza para minúsculas, para comparação de texto."""
+    if not isinstance(texto, str):
+        return ""
+    sem_acento = unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("ASCII")
+    return sem_acento.strip().lower()
+
+
+def _filtrar_por_categoria(cadastro: pd.DataFrame, categoria: Optional[str]) -> pd.DataFrame:
+    """Filtra o cadastro de fundos pela classificação CVM (ações/multimercado/todos)."""
+    categoria = (categoria or "todos").strip().lower()
+    if categoria == "todos":
+        return cadastro
+
+    valor_esperado = CATEGORIAS_RANKING.get(categoria)
+    if valor_esperado is None:
+        raise ValueError(
+            "Categoria inválida. Use 'acoes', 'multimercado' ou 'todos'."
+        )
+
+    if COLUNA_CLASSE not in cadastro.columns:
+        raise ValueError(
+            f"Coluna '{COLUNA_CLASSE}' não encontrada nos dados de cadastro; "
+            "não é possível filtrar por categoria."
+        )
+
+    valor_normalizado = _normalizar_texto(valor_esperado)
+    return cadastro[
+        cadastro[COLUNA_CLASSE].apply(_normalizar_texto) == valor_normalizado
+    ]
 
 def _periodos_ranking(data_referencia: Optional[str] = None) -> Dict[str, Dict[str, str]]:
     """Mapeia os períodos padrão para as chaves usadas pelo ranking."""
@@ -55,19 +94,19 @@ def _possui_cotas_referencia(
 
 def gerar_ranking_fundos(
     pesos: Optional[Dict[str, float]] = None,
-    top_n: int = 50,
+    top_n: Optional[int] = 10,
     fundos: Optional[pd.DataFrame] = None,
     data_referencia: Optional[str] = None,
+    categoria: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Gera o ranking de fundos pela média ponderada de rentabilidades.
 
     Fundos sem cotas de fechamento para *todos* os cinco períodos são
     excluídos. Antes dos cálculos, considera somente CNPJs únicos com mais
-    de 10 cotistas no último mês completo. Como o ranking considera somente
-    rentabilidade, são lidos apenas os cinco meses iniciais e o mês final.
+    de 10 cotistas no último mês completo, e opcionalmente filtra por
+    categoria ANBIMA ('acoes', 'multimercado' ou 'todos').
     """
     if fundos is None:
-
         fundos = carregar_depara_fundos()
 
     if top_n <= 0:
@@ -85,7 +124,20 @@ def gerar_ranking_fundos(
         raise ValueError("A soma dos pesos deve ser igual a 1")
 
     periodos = _periodos_ranking(data_referencia)
-    cadastro = fundos[["CNPJ_FUNDO", "DENOM_SOCIAL"]].dropna().drop_duplicates("CNPJ_FUNDO")
+
+    colunas_cadastro = ["CNPJ_FUNDO", "DENOM_SOCIAL"]
+    if COLUNA_CLASSE in fundos.columns:
+        colunas_cadastro.append(COLUNA_CLASSE)
+
+    cadastro = (
+        fundos[colunas_cadastro]
+        .dropna(subset=["CNPJ_FUNDO", "DENOM_SOCIAL"])
+        .drop_duplicates("CNPJ_FUNDO")
+    )
+
+    cadastro = _filtrar_por_categoria(cadastro, categoria)
+    if cadastro.empty:
+        return []
 
     ano_elegibilidade, mes_elegibilidade = map(int, obter_ultimo_mes_completo().split("-"))
     elegiveis = carregar_fundos_elegiveis_por_cotistas(
@@ -94,7 +146,7 @@ def gerar_ranking_fundos(
     cadastro = cadastro[cadastro["CNPJ_FUNDO"].isin(elegiveis["CNPJ_FUNDO"])]
     if cadastro.empty:
         return []
-
+    
     datas_referencia = [periodo["data_inicial"] for periodo in periodos.values()]
     datas_referencia.append(periodos["60m"]["data_final"])
     cotas_referencia = carregar_cotas_referencia_fundos(
@@ -291,6 +343,9 @@ def processar_comparacao_fundos(
                     periodo["data_final"]
                 )
 
+                # IMPORTANTE: a variação e a volatilidade usam df_periodo, que contém
+                # o VL_QUOTA em float64 bruto (sem nenhum arredondamento). O único
+                # arredondamento que existe é na exibição (print/JSON), nunca na conta.
                 variacao = calcular_variacao_periodo(df_periodo)
                 volatilidade = calcular_volatilidade_periodo(df_periodo)
 
@@ -299,8 +354,19 @@ def processar_comparacao_fundos(
                 ultima_data = df_completo["DT_COMPTC"].max()
                 dias_totais = (pd.to_datetime(periodo["data_final"]) - primeira_data).days
 
-                print(f"  ✅ Primeira cota: {primeira_data.strftime('%d/%m/%Y')}")
-                print(f"  ✅ Última cota: {ultima_data.strftime('%d/%m/%Y')}")
+                # Valor BRUTO da cota na primeira e na última data (float64 completo,
+                # sem arredondamento) — usado só para exibição/depuração.
+                valor_primeira_cota = df_completo.loc[
+                    df_completo["DT_COMPTC"] == primeira_data, "VL_QUOTA"
+                ].iloc[0]
+                valor_ultima_cota = df_completo.loc[
+                    df_completo["DT_COMPTC"] == ultima_data, "VL_QUOTA"
+                ].iloc[0]
+
+                # Print com precisão total (12 casas decimais), para bater exatamente
+                # com o valor usado no cálculo de variação/volatilidade.
+                print(f"  ✅ Primeira cota: {primeira_data.strftime('%d/%m/%Y')} → R$ {valor_primeira_cota:.12f}")
+                print(f"  ✅ Última cota: {ultima_data.strftime('%d/%m/%Y')} → R$ {valor_ultima_cota:.12f}")
                 print(f"  ✅ Dias totais: {dias_totais}")
                 print(f"  ✅ Variação: {variacao:.2f}%")
                 print(f"  ✅ Volatilidade: {volatilidade:.2f}%")
@@ -313,6 +379,9 @@ def processar_comparacao_fundos(
                     "volatilidade_percentual": volatilidade,
                     "tipo": "desde_inicio",
                     "primeira_data": primeira_data.strftime("%d/%m/%Y"),
+                    # Valores brutos, sem arredondamento, para auditoria/depuração
+                    "valor_primeira_cota": float(valor_primeira_cota),
+                    "valor_ultima_cota": float(valor_ultima_cota),
                     "dias_totais": dias_totais
                 })
             else:
