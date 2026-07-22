@@ -20,6 +20,9 @@ app = Flask(__name__)
 # Carrega uma vez quando o Flask inicia
 df_fundos = carregar_depara_fundos()
 
+# Chaves dos 5 períodos usados no ranking (mesmas do fundos_service)
+CHAVES_PERIODOS_RANKING = ["12m", "24m", "36m", "48m", "60m"]
+
 
 @app.route("/")
 def index():
@@ -106,7 +109,12 @@ def comparar_fundos():
 
 @app.get("/api/fundos/ranking")
 def ranking_fundos():
-    """Retorna os melhores fundos com base nos cinco períodos padrão."""
+    """Retorna os melhores fundos com base nos cinco períodos padrão.
+
+    Aceita pesos customizados por período via query string (em percentual,
+    0-100): peso_12m, peso_24m, peso_36m, peso_48m, peso_60m. Se nenhum for
+    informado, o serviço usa os pesos padrão (10/15/50/15/10).
+    """
     try:
         top_n = int(request.args.get("top_n", 50))
     except ValueError:
@@ -117,6 +125,19 @@ def ranking_fundos():
 
     categoria = request.args.get("categoria", "todos")
 
+    # Se o usuário informou pelo menos um peso, monta o dicionário completo.
+    # A validação de que a soma dá 100% (1.0) é feita dentro do
+    # gerar_ranking_fundos, que já lança ValueError se não bater.
+    pesos = None
+    if any(f"peso_{chave}" in request.args for chave in CHAVES_PERIODOS_RANKING):
+        try:
+            pesos = {
+                chave: float(request.args.get(f"peso_{chave}", 0)) / 100
+                for chave in CHAVES_PERIODOS_RANKING
+            }
+        except ValueError:
+            return jsonify({"erro": "Os pesos devem ser números"}), 400
+
     data_referencia = request.args.get("data_referencia")
     try:
         ranking = gerar_ranking_fundos(
@@ -124,6 +145,7 @@ def ranking_fundos():
             top_n=top_n,
             data_referencia=data_referencia,
             categoria=categoria,
+            pesos=pesos,
         )
     except (ValueError, TypeError) as erro:
         return jsonify({"erro": str(erro)}), 400
@@ -131,6 +153,10 @@ def ranking_fundos():
     return jsonify({
         "data_referencia": data_referencia or obter_data_referencia().strftime("%Y-%m-%d"),
         "categoria": categoria,
+        "pesos": (
+            {chave: round(valor * 100, 2) for chave, valor in pesos.items()}
+            if pesos else None
+        ),
         "fundos": ranking,
     })
 

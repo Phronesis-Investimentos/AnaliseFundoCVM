@@ -197,3 +197,72 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     color: #6b7280;
 }
 .vol-badge-na .vol-dot { background-color: #6b7280; }
+
+/* ===========================
+   Modal Ranking
+=========================== */
+
+
+.ranking-modal {
+    width: min(700px, 95vw);
+    max-width: 700px;
+    margin: auto;
+}
+
+/* Grid dos pesos */
+.ranking-modal .grid.grid-cols-5 {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(70px, 1fr));
+    gap: 12px;
+    justify-items: center;
+}
+
+.ranking-modal .grid.grid-cols-5 > div {
+    width: 100%;
+    text-align: center;
+}
+
+.ranking-modal .grid.grid-cols-5 input {
+    width: 100%;
+    height: 42px;
+    padding: 0;
+    text-align: center;
+    font-size: 14px;
+}
+
+.ranking-modal .grid.grid-cols-5 label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: #9ca3af;
+    text-align: center;
+}
+
+/* Primeira linha */
+.ranking-modal .grid.grid-cols-2 {
+    gap: 18px;
+}
+
+/* Botão */
+.ranking-modal button#btn_confirmar_filtros_ranking {
+    margin-top: 12px;
+}
+
+/* Responsivo */
+@media (max-width: 640px) {
+
+    .ranking-modal {
+        width: 96vw;
+        padding: 24px;
+    }
+
+    .ranking-modal .grid.grid-cols-5 {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+    }
+
+    .ranking-modal .grid.grid-cols-5 input {
+        height: 38px;
+        font-size: 12px;
+    }
+}

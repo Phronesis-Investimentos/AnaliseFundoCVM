@@ -423,52 +423,80 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // ==========================================
-    // 7. RANKING TOP
+    // 7. RANKING (modal de filtros + geração)
     // ==========================================
 
     // Guarda a data de referência do último ranking gerado, para que o
     // cálculo de volatilidade de cada fundo use os mesmos períodos.
-// ==========================================
-// 7. RANKING (quantidade e categoria configuráveis)
-// ==========================================
+    let dataReferenciaRankingAtual = null;
 
-let dataReferenciaRankingAtual = null;
+    const PERIODOS_RANKING = ['12m', '24m', '36m', '48m', '60m'];
 
-const PERIODOS_RANKING = ['12m', '24m', '36m', '48m', '60m'];
+    const ROTULOS_CATEGORIA = {
+        todos: 'Todos',
+        acoes: 'Ações',
+        multimercado: 'Multimercado',
+    };
 
-const ROTULOS_CATEGORIA = {
-    todos: 'Todos',
-    acoes: 'Ações',
-    multimercado: 'Multimercado',
-};
+    const modalFiltrosRanking = document.getElementById('modal_filtros_ranking');
+    const inputsPesoRanking = document.querySelectorAll('.peso-ranking-input');
+    const somaPesosLabel = document.getElementById('filtro_ranking_soma');
+    const erroPesosLabel = document.getElementById('filtro_ranking_erro');
+    const btnConfirmarFiltrosRanking = document.getElementById('btn_confirmar_filtros_ranking');
 
-document.getElementById('btn_gerar_ranking').addEventListener('click', async () => {
-    const inputQuantidade = document.getElementById('ranking_quantidade');
-    const selectCategoria = document.getElementById('ranking_categoria');
-
-    const quantidade = inputQuantidade ? parseInt(inputQuantidade.value, 10) : 50;
-    const categoria = selectCategoria ? selectCategoria.value : 'todos';
-
-    if (!quantidade || quantidade < 1) {
-        alert('Informe uma quantidade válida de fundos.');
-        return;
+    function somaPesosAtual() {
+        let soma = 0;
+        inputsPesoRanking.forEach(input => {
+            soma += parseFloat(input.value) || 0;
+        });
+        return soma;
     }
 
-    showLoader();
-    try {
-        const params = new URLSearchParams({
-            top_n: quantidade,
-            categoria: categoria,
-        });
+    // Atualiza o rótulo da soma dos pesos e trava o botão OK enquanto a
+    // soma não fechar exatamente em 100%.
+    function atualizarSomaPesos() {
+        const soma = Math.round(somaPesosAtual() * 100) / 100;
+        somaPesosLabel.textContent = `${soma}%`;
 
-        const res = await fetch(`/api/fundos/ranking?${params.toString()}`);
-        const data = await res.json();
+        const valido = Math.abs(soma - 100) < 0.01;
 
-        if (!res.ok || data.erro) {
-            alert(data.erro || 'Não foi possível gerar o ranking.');
-            return;
+        somaPesosLabel.classList.toggle('text-neon', valido);
+        somaPesosLabel.classList.toggle('text-[#ff3366]', !valido);
+
+        erroPesosLabel.classList.toggle('hidden', valido);
+
+        btnConfirmarFiltrosRanking.disabled = !valido;
+        btnConfirmarFiltrosRanking.classList.toggle('opacity-50', !valido);
+        btnConfirmarFiltrosRanking.classList.toggle('cursor-not-allowed', !valido);
+    }
+
+    inputsPesoRanking.forEach(input => {
+        input.addEventListener('input', atualizarSomaPesos);
+    });
+
+    function abrirModalFiltrosRanking() {
+        atualizarSomaPesos();
+        modalFiltrosRanking.classList.remove('hidden');
+        modalFiltrosRanking.classList.add('flex');
+    }
+
+    function fecharModalFiltrosRanking() {
+        modalFiltrosRanking.classList.add('hidden');
+        modalFiltrosRanking.classList.remove('flex');
+    }
+
+    document.getElementById('btn_abrir_filtros_ranking').addEventListener('click', abrirModalFiltrosRanking);
+    document.getElementById('btn_fechar_filtros_ranking').addEventListener('click', fecharModalFiltrosRanking);
+
+    // Fecha o modal de filtros ao clicar no backdrop
+    modalFiltrosRanking.addEventListener('click', (e) => {
+        if (e.target === modalFiltrosRanking || e.target.classList.contains('bg-black/85')) {
+            fecharModalFiltrosRanking();
         }
+    });
 
+    // Renderiza a tabela de resultado do ranking a partir dos dados da API
+    function renderizarRanking(data) {
         const thead = document.getElementById('tabela_comparacao_head');
         const tbody = document.getElementById('tabela_comparacao_body');
         const titulo = document.getElementById('modal_titulo');
@@ -522,14 +550,61 @@ document.getElementById('btn_gerar_ranking').addEventListener('click', async () 
         const rotuloCategoria = ROTULOS_CATEGORIA[data.categoria] || data.categoria;
         titulo.textContent = `Ranking Top ${data.fundos.length} de Fundos`;
         subtitulo.textContent = `${data.fundos.length} fundo(s) elegível(is) · Categoria: ${rotuloCategoria} · Referência: ${data.data_referencia}`;
-        abrirModalResultado();
-    } catch (e) {
-        alert('Erro ao gerar o ranking.');
-        console.error(e);
-    } finally {
-        hideLoader();
     }
-});
+
+    // Busca o ranking na API com os filtros escolhidos pelo usuário no modal
+    async function gerarRanking(quantidade, categoria, pesos) {
+        showLoader();
+        try {
+            const params = new URLSearchParams({
+                top_n: quantidade,
+                categoria: categoria,
+            });
+
+            Object.entries(pesos).forEach(([periodo, valor]) => {
+                params.set(`peso_${periodo}`, valor);
+            });
+
+            const res = await fetch(`/api/fundos/ranking?${params.toString()}`);
+            const data = await res.json();
+
+            if (!res.ok || data.erro) {
+                alert(data.erro || 'Não foi possível gerar o ranking.');
+                return;
+            }
+
+            renderizarRanking(data);
+            abrirModalResultado();
+        } catch (e) {
+            alert('Erro ao gerar o ranking.');
+            console.error(e);
+        } finally {
+            hideLoader();
+        }
+    }
+
+    btnConfirmarFiltrosRanking.addEventListener('click', () => {
+        const soma = Math.round(somaPesosAtual() * 100) / 100;
+        if (Math.abs(soma - 100) > 0.01) {
+            return; // botão já fica desabilitado, isso aqui é só uma trava extra
+        }
+
+        const quantidade = parseInt(document.getElementById('filtro_ranking_quantidade').value, 10);
+        const categoria = document.getElementById('filtro_ranking_categoria').value;
+
+        if (!quantidade || quantidade < 1) {
+            alert('Informe uma quantidade válida de fundos.');
+            return;
+        }
+
+        const pesos = {};
+        inputsPesoRanking.forEach(input => {
+            pesos[input.dataset.periodo] = parseFloat(input.value) || 0;
+        });
+
+        fecharModalFiltrosRanking();
+        gerarRanking(quantidade, categoria, pesos);
+    });
 
     // Delegação de evento: as linhas do ranking são recriadas a cada
     // geração, então o listener fica no tbody (que é fixo) em vez de em
@@ -618,7 +693,7 @@ document.getElementById('btn_gerar_ranking').addEventListener('click', async () 
     });
 
     // ==========================================
-    // 8. INICIALIZAÇÃO
+    // 9. INICIALIZAÇÃO
     // ==========================================
 
     carregarPeriodosPadrao();
