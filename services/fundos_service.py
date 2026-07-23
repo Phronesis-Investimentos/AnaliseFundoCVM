@@ -159,11 +159,20 @@ def gerar_ranking_fundos(
 
     resultados = []
     nomes_por_cnpj = cadastro.set_index("CNPJ_FUNDO")["DENOM_SOCIAL"]
+    # Classificação ANBIMA por CNPJ, quando disponível — usada para o campo
+    # "tipo" no ranking (útil, por exemplo, na exportação para Excel).
+    tipos_por_cnpj = (
+        cadastro.set_index("CNPJ_FUNDO")[COLUNA_CLASSE]
+        if COLUNA_CLASSE in cadastro.columns
+        else None
+    )
     for cnpj, df_fundo in cotas_referencia.groupby("CNPJ_FUNDO", sort=False):
         if not _possui_cotas_referencia(df_fundo, periodos.values()):
             continue
 
         registro = {"nome": nomes_por_cnpj.get(cnpj, cnpj), "cnpj": cnpj}
+        if tipos_por_cnpj is not None:
+            registro["tipo"] = tipos_por_cnpj.get(cnpj, "")
         nota = 0.0
         for chave, periodo in periodos.items():
             meses_periodo = {
@@ -198,7 +207,8 @@ def calcular_volatilidade_ranking_fundo(
     para calcular rentabilidade, então não carrega a série diária completa.
     A volatilidade, porém, exige o histórico diário — por isso essa função é
     separada e só é chamada sob demanda (botão "Ver Volatilidade" de um fundo
-    específico), evitando pesar o cálculo do ranking geral.
+    específico, ou na exportação para Excel), evitando pesar o cálculo do
+    ranking geral.
     """
     cnpj_formatado = formatar_cnpj(cnpj)
     periodos = _periodos_ranking(data_referencia)

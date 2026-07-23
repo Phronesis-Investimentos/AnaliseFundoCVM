@@ -22,8 +22,8 @@
                         background: '#080808',
                         surface: 'rgba(255, 255, 255, 0.03)',
                         surfaceHover: 'rgba(255, 255, 255, 0.08)',
-                        neon: '#00e5ff',
-                        neonDim: 'rgba(0, 229, 255, 0.15)'
+                        neon: '#B11116',
+                        neonDim: 'rgba(177, 17, 22, 0.15)'
                     }
                 }
             }
@@ -46,9 +46,6 @@
             <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white to-neon">
                 Comparação de Fundos <span class="text-neon">CVM</span>
             </h1>
-            <p class="text-gray-400 text-lg font-light max-w-2xl mx-auto">
-                Compare rentabilidade e volatilidade de múltiplos fundos de investimento em diferentes períodos com dados oficiais da CVM.
-            </p>
         </header>
 
         <!-- SEÇÃO: COMPARAÇÃO DE FUNDOS -->
@@ -152,9 +149,15 @@
                         Rentabilidade e volatilidade por período
                     </p>
                 </div>
-                <button id="btn_fechar_modal" class="w-10 h-10 flex-shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all magnetic-btn">
-                    <i class="ph ph-x text-xl"></i>
-                </button>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <button id="btn_exportar_excel" class="hidden items-center gap-2 h-10 px-4 rounded-full bg-neon/10 hover:bg-neon hover:text-black border border-neon/30 text-neon text-sm font-medium transition-all magnetic-btn">
+                        <i class="ph ph-file-xls text-lg"></i>
+                        <span>Exportar Excel</span>
+                    </button>
+                    <button id="btn_fechar_modal" class="w-10 h-10 flex-shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all magnetic-btn">
+                        <i class="ph ph-x text-xl"></i>
+                    </button>
+                </div>
             </div>
             <!-- Tabela (scrollável dentro do modal) -->
             <div class="flex-1 overflow-auto rounded-2xl border border-white/10 bg-black/40 glass-panel p-1">
@@ -266,7 +269,27 @@
             </div>
         </div>
     </div>
+    <!-- ========================================== -->
+    <!-- MODAL DE PROGRESSO DA EXPORTAÇÃO            -->
+    <!-- ========================================== -->
+    <div id="modal_progresso_exportacao" class="fixed inset-0 z-[97] hidden items-center justify-center px-4">
+        <div class="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
 
+        <div class="relative z-10 glass-panel rounded-3xl p-8 w-full max-w-sm text-center">
+            <div class="w-14 h-14 mx-auto mb-5 rounded-full bg-neon/10 flex items-center justify-center text-neon">
+                <i class="ph ph-file-xls text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-semibold mb-1">Gerando planilha...</h3>
+            <p class="text-xs text-gray-400 mb-5" id="progresso_exportacao_texto">
+                Calculando volatilidade dos fundos
+            </p>
+
+            <div class="w-full h-2 bg-white/5 rounded-full overflow-hidden mb-2">
+                <div id="progresso_exportacao_barra" class="h-full bg-neon transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <p class="text-xs text-gray-500" id="progresso_exportacao_contagem">0 / 0 fundos</p>
+        </div>
+    </div>
     <!-- Loader Global Overlay -->
     <div id="global_loader" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
         <div class="relative w-16 h-16">

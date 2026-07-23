@@ -412,6 +412,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 subtitulo.textContent = `${data.fundos.length} fundo(s) · ${data.periodos.length} período(s)`;
             }
 
+            // Comparação não tem exportação para Excel — esconde o botão
+            // (ele só faz sentido para o ranking, com os 5 períodos fixos).
+            ultimoRankingData = null;
+            document.getElementById('btn_exportar_excel').classList.add('hidden');
+            document.getElementById('btn_exportar_excel').classList.remove('flex');
+
             abrirModalResultado();
 
         } catch(e) {
@@ -422,13 +428,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // ==========================================
-    // 7. RANKING (modal de filtros + geração)
+// ==========================================
+    // 7. RANKING (modal de filtros + geração + exportação)
     // ==========================================
 
     // Guarda a data de referência do último ranking gerado, para que o
     // cálculo de volatilidade de cada fundo use os mesmos períodos.
     let dataReferenciaRankingAtual = null;
+
+    // Guarda o payload completo do último ranking gerado (fundos, data de
+    // referência e categoria), usado tanto para preencher a volatilidade
+    // sob demanda quanto para a exportação em Excel.
+    let ultimoRankingData = null;
 
     const PERIODOS_RANKING = ['12m', '24m', '36m', '48m', '60m'];
 
@@ -443,6 +454,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const somaPesosLabel = document.getElementById('filtro_ranking_soma');
     const erroPesosLabel = document.getElementById('filtro_ranking_erro');
     const btnConfirmarFiltrosRanking = document.getElementById('btn_confirmar_filtros_ranking');
+    const btnExportarExcel = document.getElementById('btn_exportar_excel');
 
     function somaPesosAtual() {
         let soma = 0;
@@ -515,6 +527,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tbody.innerHTML = '';
 
         dataReferenciaRankingAtual = data.data_referencia;
+        ultimoRankingData = data;
 
         data.fundos.forEach((fundo, indice) => {
             const linha = document.createElement('tr');
@@ -550,6 +563,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const rotuloCategoria = ROTULOS_CATEGORIA[data.categoria] || data.categoria;
         titulo.textContent = `Ranking Top ${data.fundos.length} de Fundos`;
         subtitulo.textContent = `${data.fundos.length} fundo(s) elegível(is) · Categoria: ${rotuloCategoria} · Referência: ${data.data_referencia}`;
+
+        // É um ranking (não comparação) — mostra o botão de exportar
+        btnExportarExcel.classList.remove('hidden');
+        btnExportarExcel.classList.add('flex');
     }
 
     // Busca o ranking na API com os filtros escolhidos pelo usuário no modal
@@ -646,6 +663,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
 
+            // Guarda a volatilidade calculada no registro do ranking em memória,
+            // para que a exportação para Excel não precise recalcular esse fundo.
+            if (ultimoRankingData) {
+                const fundoRegistro = ultimoRankingData.fundos.find(f => f.cnpj === cnpj);
+                if (fundoRegistro) {
+                    PERIODOS_RANKING.forEach(periodo => {
+                        fundoRegistro[`volatilidade_${periodo}`] = dadosVol[`volatilidade_${periodo}`];
+                    });
+                }
+            }
+
             botao.innerHTML = '<i class="ph ph-check-circle"></i> Volatilidade calculada';
             botao.classList.remove('opacity-60', 'cursor-wait');
         } catch (erro) {
@@ -657,6 +685,110 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // ==========================================
+    // 7.1 EXPORTAÇÃO PARA EXCEL (com indicador de progresso)
+    // ==========================================
+
+    // Elementos do modal de progresso da exportação
+    const modalProgressoExportacao = document.getElementById('modal_progresso_exportacao');
+    const barraProgressoExportacao = document.getElementById('progresso_exportacao_barra');
+    const contagemProgressoExportacao = document.getElementById('progresso_exportacao_contagem');
+    const textoProgressoExportacao = document.getElementById('progresso_exportacao_texto');
+
+    function abrirProgressoExportacao() {
+        barraProgressoExportacao.style.width = '0%';
+        contagemProgressoExportacao.textContent = '0 / 0 fundos';
+        textoProgressoExportacao.textContent = 'Calculando volatilidade dos fundos';
+        modalProgressoExportacao.classList.remove('hidden');
+        modalProgressoExportacao.classList.add('flex');
+    }
+
+    function atualizarProgressoExportacao(processados, total) {
+        const percentual = total > 0 ? Math.round((processados / total) * 100) : 0;
+        barraProgressoExportacao.style.width = `${percentual}%`;
+        contagemProgressoExportacao.textContent = `${processados} / ${total} fundos`;
+    }
+
+    function fecharProgressoExportacao() {
+        modalProgressoExportacao.classList.add('hidden');
+        modalProgressoExportacao.classList.remove('flex');
+    }
+
+    // Exportar ranking atual para Excel, com indicador de progresso.
+    // Fluxo: inicia o job no backend -> faz polling do status a cada
+    // 700ms -> quando concluído, dispara o download e fecha o indicador.
+    btnExportarExcel.addEventListener('click', async () => {
+        if (!ultimoRankingData) return;
+
+        try {
+            const resInicio = await fetch('/api/fundos/ranking/exportar/iniciar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fundos: ultimoRankingData.fundos,
+                    data_referencia: ultimoRankingData.data_referencia,
+                    categoria: ultimoRankingData.categoria,
+                }),
+            });
+
+            const dadosInicio = await resInicio.json();
+            if (!resInicio.ok || dadosInicio.erro) {
+                alert(dadosInicio.erro || 'Não foi possível iniciar a exportação.');
+                return;
+            }
+
+            const jobId = dadosInicio.job_id;
+            const total = dadosInicio.total;
+
+            abrirProgressoExportacao();
+            atualizarProgressoExportacao(0, total);
+
+            const intervalo = setInterval(async () => {
+                try {
+                    const resStatus = await fetch(`/api/fundos/ranking/exportar/status/${jobId}`);
+                    const status = await resStatus.json();
+
+                    if (!resStatus.ok) {
+                        clearInterval(intervalo);
+                        fecharProgressoExportacao();
+                        alert(status.erro || 'Erro ao acompanhar a exportação.');
+                        return;
+                    }
+
+                    if (status.status === 'erro') {
+                        clearInterval(intervalo);
+                        fecharProgressoExportacao();
+                        alert(status.erro || 'Erro ao gerar a planilha.');
+                        return;
+                    }
+
+                    atualizarProgressoExportacao(status.processados, status.total);
+
+                    if (status.status === 'concluido') {
+                        clearInterval(intervalo);
+                        textoProgressoExportacao.textContent = 'Baixando arquivo...';
+
+                        const link = document.createElement('a');
+                        link.href = `/api/fundos/ranking/exportar/download/${jobId}`;
+                        link.download = `ranking_fundos_${ultimoRankingData.data_referencia || 'atual'}.xlsx`;
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+
+                        setTimeout(fecharProgressoExportacao, 600);
+                    }
+                } catch (erro) {
+                    clearInterval(intervalo);
+                    fecharProgressoExportacao();
+                    alert('Erro ao acompanhar a exportação.');
+                    console.error(erro);
+                }
+            }, 700);
+        } catch (erro) {
+            alert('Erro ao exportar o ranking.');
+            console.error(erro);
+        }
+    });
     // ==========================================
     // 8. MODAL DE RESULTADO (Tela Full-Screen)
     // ==========================================

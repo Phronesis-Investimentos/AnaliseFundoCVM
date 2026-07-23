@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 
 from services.nome_fundo import carregar_depara_fundos
 from services.fundos_service import (
@@ -6,6 +6,11 @@ from services.fundos_service import (
     processar_comparacao_fundos,
     gerar_ranking_fundos,
     calcular_volatilidade_ranking_fundo,
+)
+from services.exportacao_service import (
+    iniciar_exportacao_ranking,
+    obter_status_exportacao,
+    obter_arquivo_exportacao,
 )
 from utils.validacoes import (
     validar_dados_variacao,
@@ -183,6 +188,57 @@ def volatilidade_ranking_fundo():
         return jsonify({"erro": str(erro)}), 400
 
     return jsonify(resultado)
+
+
+@app.post("/api/fundos/ranking/exportar/iniciar")
+def iniciar_exportacao_ranking_excel():
+    """
+    Inicia a exportação do ranking para Excel em background e retorna um
+    job_id. O front-end usa esse job_id para consultar o progresso em
+    /status/<job_id> e baixar o arquivo em /download/<job_id> quando
+    concluído.
+    """
+    dados = request.get_json(silent=True) or {}
+    fundos = dados.get("fundos")
+
+    if not fundos:
+        return jsonify({"erro": "Nenhum fundo informado para exportação"}), 400
+
+    try:
+        job_id = iniciar_exportacao_ranking(
+            fundos,
+            data_referencia=dados.get("data_referencia"),
+            categoria=dados.get("categoria"),
+        )
+    except ValueError as erro:
+        return jsonify({"erro": str(erro)}), 400
+
+    return jsonify({"job_id": job_id, "total": len(fundos)})
+
+
+@app.get("/api/fundos/ranking/exportar/status/<job_id>")
+def status_exportacao_ranking_excel(job_id):
+    """Retorna o progresso atual de um job de exportação (para polling)."""
+    status = obter_status_exportacao(job_id)
+    if status is None:
+        return jsonify({"erro": "Exportação não encontrada"}), 404
+
+    return jsonify(status)
+
+
+@app.get("/api/fundos/ranking/exportar/download/<job_id>")
+def download_exportacao_ranking_excel(job_id):
+    """Entrega o arquivo .xlsx de um job já concluído."""
+    buffer, nome_arquivo = obter_arquivo_exportacao(job_id)
+    if buffer is None:
+        return jsonify({"erro": "Arquivo não disponível ou ainda não concluído"}), 404
+
+    return send_file(
+        buffer,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=nome_arquivo,
+    )
 
 
 if __name__ == "__main__":
