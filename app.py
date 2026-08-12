@@ -1,3 +1,4 @@
+import pandas as pd
 from flask import Flask, render_template, request, jsonify, send_file
 
 from services.nome_fundo import carregar_depara_fundos
@@ -12,6 +13,8 @@ from services.exportacao_service import (
     obter_status_exportacao,
     obter_arquivo_exportacao,
 )
+from services.portfolio import portfolio as calcular_portfolio
+from services.exportacao_portfolio import gerar_excel_portfolio
 from utils.validacoes import (
     validar_dados_variacao,
     validar_dados_comparacao,
@@ -31,7 +34,17 @@ CHAVES_PERIODOS_RANKING = ["12m", "24m", "36m", "48m", "60m"]
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("home.html")
+
+
+@app.route("/comparar")
+def comparar():
+    return render_template("comparar.html")
+
+
+@app.route("/portfolio")
+def portfolio():
+    return render_template("portfolio.html")
 
 
 @app.route("/api/fundos")
@@ -46,19 +59,23 @@ def listar_fundos():
 
 @app.route("/api/fundos/buscar")
 def buscar_fundos():
-    termo = request.args.get("busca", "")
-    
+    termo = request.args.get("busca", "").strip()
+
     if len(termo) < 3:
         return jsonify([])
-    
-    resultado = (
-        df_fundos[
-            df_fundos["DENOM_SOCIAL"]
-            .str.contains(termo, case=False, na=False)
-        ]
-        .head(10)
+
+    # Permite buscar tanto pelo nome do fundo quanto pelo CNPJ
+    # (com ou sem pontuação, ex: "15834698000118" ou "15.834.698/0001-18").
+    filtro_nome = df_fundos["DENOM_SOCIAL"].str.contains(termo, case=False, na=False)
+
+    cnpj_normalizado = df_fundos["CNPJ_FUNDO"].astype(str).str.replace(
+        r"[./-]", "", regex=True
     )
-    
+    termo_cnpj = termo.replace(".", "").replace("/", "").replace("-", "")
+    filtro_cnpj = cnpj_normalizado.str.contains(termo_cnpj, na=False)
+
+    resultado = df_fundos[filtro_nome | filtro_cnpj].head(10)
+
     return jsonify(resultado.to_dict(orient="records"))
 
 
@@ -188,6 +205,114 @@ def volatilidade_ranking_fundo():
         return jsonify({"erro": str(erro)}), 400
 
     return jsonify(resultado)
+
+
+@app.post("/api/portfolio/gerar")
+def gerar_portfolio():
+    """Calcula rentabilidade, volatilidade (36m) e correlação para o
+    conjunto de fundos selecionado na tela de Portfólio.
+
+    Espera um JSON com:
+    { "fundos": ["<cnpj1>", "<cnpj2>", ...], "data_referencia": "YYYY-MM-DD" }
+
+    "data_referencia" é opcional (usa hoje se não vier). Os 756 pregões
+    são contados para trás a partir dela; se a data cair num dia não
+    útil, o cálculo cai automaticamente para o último pregão disponível
+    anterior.
+    """
+    dados = request.get_json(silent=True) or {}
+    cnpjs = dados.get("fundos")
+    data_referencia = dados.get("data_referencia")
+
+    if not cnpjs:
+        return jsonify({"erro": "Nenhum fundo informado"}), 400
+
+    if data_referencia:
+        try:
+            pd.Timestamp(data_referencia)
+        except (ValueError, TypeError):
+            return jsonify({"erro": "data_referencia inválida"}), 400
+
+    fundos_selecionados = df_fundos[
+        df_fundos["CNPJ_FUNDO"].isin(cnpjs)
+    ].copy()
+
+    if fundos_selecionados.empty:
+        return jsonify({"erro": "Nenhum dos fundos informados foi encontrado"}), 400
+
+    resultado, correlacao = calcular_portfolio(
+        fundos_selecionados,
+        data_referencia=data_referencia,
+    )
+
+    if resultado.empty:
+        return jsonify({"fundos": [], "correlacao": {}})
+
+    # Junta o nome do fundo ao resultado (o service só trabalha com CNPJ)
+    resultado = resultado.merge(
+        df_fundos[["CNPJ_FUNDO", "DENOM_SOCIAL"]],
+        on="CNPJ_FUNDO",
+        how="left",
+    )
+
+    fundos_json = [
+        {
+            "cnpj": linha["CNPJ_FUNDO"],
+            "nome": linha["DENOM_SOCIAL"],
+            "rentabilidade_36m": round(linha["RENTABILIDADE"], 2),
+            "volatilidade_36m": round(linha["VOLATILIDADE"], 2),
+        }
+        for _, linha in resultado.iterrows()
+    ]
+
+    # Matriz de correlação -> dict serializável { cnpj: { cnpj: valor } }
+    correlacao_json = (
+        correlacao.round(2).where(pd.notnull(correlacao), None).to_dict()
+        if not correlacao.empty else {}
+    )
+
+    return jsonify({
+        "fundos": fundos_json,
+        "correlacao": correlacao_json,
+    })
+
+
+@app.post("/api/portfolio/exportar")
+def exportar_portfolio_excel():
+    """Gera e devolve um .xlsx com a composição do portfólio (CNPJ, nome,
+    rentabilidade, volatilidade, peso) e, em outra aba, a matriz de
+    correlação — usando exatamente os dados/pesos que estão na tela no
+    momento do clique (evita reprocessar e ficar diferente do que o
+    usuário está vendo, principalmente os pesos editados manualmente).
+
+    Espera um JSON com:
+    {
+      "fundos": [{ "cnpj", "nome", "rentabilidade_36m", "volatilidade_36m", "peso" }, ...],
+      "correlacao": { "<cnpj>": { "<cnpj>": valor, ... }, ... },
+      "data_referencia": "YYYY-MM-DD"
+    }
+    """
+    dados = request.get_json(silent=True) or {}
+    fundos = dados.get("fundos")
+
+    if not fundos:
+        return jsonify({"erro": "Nenhum fundo informado para exportação"}), 400
+
+    buffer = gerar_excel_portfolio(
+        fundos=fundos,
+        correlacao=dados.get("correlacao"),
+        data_referencia=dados.get("data_referencia"),
+    )
+
+    data_arquivo = dados.get("data_referencia") or obter_data_referencia().strftime("%Y-%m-%d")
+    nome_arquivo = f"portfolio_{data_arquivo}.xlsx"
+
+    return send_file(
+        buffer,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=nome_arquivo,
+    )
 
 
 @app.post("/api/fundos/ranking/exportar/iniciar")
