@@ -223,6 +223,9 @@ def gerar_portfolio():
     dados = request.get_json(silent=True) or {}
     cnpjs = dados.get("fundos")
     data_referencia = dados.get("data_referencia")
+    # Opcional: { "<cnpj>": peso_percentual (0-100), ... } — vindo dos
+    # inputs de peso da tela. Convertemos para fração (0-1) aqui.
+    pesos_recebidos = dados.get("pesos")
 
     if not cnpjs:
         return jsonify({"erro": "Nenhum fundo informado"}), 400
@@ -233,6 +236,16 @@ def gerar_portfolio():
         except (ValueError, TypeError):
             return jsonify({"erro": "data_referencia inválida"}), 400
 
+    pesos = None
+    if pesos_recebidos:
+        try:
+            pesos = {
+                str(cnpj): float(peso) / 100
+                for cnpj, peso in pesos_recebidos.items()
+            }
+        except (TypeError, ValueError):
+            return jsonify({"erro": "Os pesos devem ser números"}), 400
+
     fundos_selecionados = df_fundos[
         df_fundos["CNPJ_FUNDO"].isin(cnpjs)
     ].copy()
@@ -240,13 +253,18 @@ def gerar_portfolio():
     if fundos_selecionados.empty:
         return jsonify({"erro": "Nenhum dos fundos informados foi encontrado"}), 400
 
-    resultado, correlacao = calcular_portfolio(
+    resultado, correlacao, covariancia = calcular_portfolio(
         fundos_selecionados,
+        pesos=pesos,
         data_referencia=data_referencia,
     )
 
     if resultado.empty:
-        return jsonify({"fundos": [], "correlacao": {}})
+        return jsonify({
+            "fundos": [],
+            "correlacao": {},
+            "covariancia": {},
+        })
 
     # Junta o nome do fundo ao resultado (o service só trabalha com CNPJ)
     resultado = resultado.merge(
@@ -271,9 +289,16 @@ def gerar_portfolio():
         if not correlacao.empty else {}
     )
 
+    # Matriz de covariância (correlação x volatilidade x peso de cada par)
+    covariancia_json = (
+        covariancia.round(4).where(pd.notnull(covariancia), None).to_dict()
+        if not covariancia.empty else {}
+    )
+
     return jsonify({
         "fundos": fundos_json,
         "correlacao": correlacao_json,
+        "covariancia": covariancia_json,
     })
 
 
@@ -289,6 +314,7 @@ def exportar_portfolio_excel():
     {
       "fundos": [{ "cnpj", "nome", "rentabilidade_36m", "volatilidade_36m", "peso" }, ...],
       "correlacao": { "<cnpj>": { "<cnpj>": valor, ... }, ... },
+      "covariancia": { "<cnpj>": { "<cnpj>": valor, ... }, ... },
       "data_referencia": "YYYY-MM-DD"
     }
     """
@@ -301,6 +327,7 @@ def exportar_portfolio_excel():
     buffer = gerar_excel_portfolio(
         fundos=fundos,
         correlacao=dados.get("correlacao"),
+        covariancia=dados.get("covariancia"),
         data_referencia=dados.get("data_referencia"),
     )
 

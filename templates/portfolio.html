@@ -159,10 +159,23 @@
                 </div>
                 <h3 class="text-xl font-semibold">Matriz de Correlação</h3>
             </div>
-            <p class="text-xs text-gray-500 mb-6 ml-[52px]">Correlação entre os retornos diários dos fundos (36 meses). Próximo de 1 = movem juntos · Próximo de -1 = movem opostos</p>
-
             <div id="correlacao_wrapper" class="overflow-x-auto rounded-2xl border border-white/10 bg-black/40 p-4">
                 <table id="tabela_correlacao" class="text-center text-xs border-separate" style="border-spacing: 4px;">
+                    <!-- JS -->
+                </table>
+            </div>
+        </section>
+
+        <!-- SEÇÃO: MATRIZ DE COVARIÂNCIA -->
+        <section id="painel_covariancia_portfolio" class="glass-panel rounded-3xl p-6 animate-fade-in-up hidden mb-8">
+            <div class="flex items-center gap-3 mb-1">
+                <div class="w-10 h-10 rounded-full bg-neon/10 flex items-center justify-center text-neon icon-scale-hover">
+                    <i class="ph ph-grid-four text-xl"></i>
+                </div>
+                <h3 class="text-xl font-semibold">Matriz de Covariância</h3>
+            </div>
+            <div id="covariancia_wrapper" class="overflow-x-auto rounded-2xl border border-white/10 bg-black/40 p-4">
+                <table id="tabela_covariancia" class="text-center text-xs border-separate" style="border-spacing: 4px;">
                     <!-- JS -->
                 </table>
             </div>

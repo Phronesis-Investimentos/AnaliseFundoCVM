@@ -176,29 +176,113 @@ def calcular_correlacao(base_cotas: pd.DataFrame) -> pd.DataFrame:
 
     return correlacao
 
+def calcular_covariancia(
+    correlacao: pd.DataFrame,
+    volatilidades: dict[str, float],
+    pesos: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """
+    Calcula a matriz de covariância entre os fundos usando a fórmula
+    simples de covariância a partir da correlação:
+
+        cov(i, j) = correlacao(i, j) * vol(i) * vol(j) * peso(i) * peso(j)
+
+    Ou seja, mesma estrutura/shape da matriz de correlação (CNPJ x
+    CNPJ), mas com o valor "real" (não normalizado entre -1 e 1): cada
+    célula já embute a volatilidade de cada fundo e o peso de cada um
+    no portfólio.
+
+    IMPORTANTE: como todos os termos da fórmula (correlação, volatilidade
+    e peso) são frações entre -1 e 1, `volatilidades` aqui já é
+    convertido de percentual (15.0 = 15%) para fração decimal (0.15)
+    antes de multiplicar — senão o resultado explode (ex.: 15 * 15 = 225
+    em vez de 0.15 * 0.15 = 0.0225). Com essa conversão, cada célula da
+    matriz também fica sempre <= 1 (mesmo teto da correlação), já que é
+    produto de frações <= 1.
+
+    Parâmetros
+    ----------
+    correlacao : pd.DataFrame
+        Matriz de correlação entre os fundos (ver `calcular_correlacao`),
+        indexada e com colunas por CNPJ_FUNDO.
+    volatilidades : dict[str, float]
+        CNPJ_FUNDO -> volatilidade anualizada em PERCENTUAL (mesma escala
+        de VOLATILIDADE, ex.: 15.0 = 15%). É convertida para fração
+        decimal internamente.
+    pesos : dict[str, float] | None
+        CNPJ_FUNDO -> peso (fração, ex.: 0.25 para 25%). Se None, ou se
+        um fundo não tiver peso informado, assume peso igual entre
+        todos os fundos da matriz de correlação (1 / quantidade de
+        fundos).
+
+    Retorno
+    -------
+    pd.DataFrame
+        Matriz de covariância, indexada e com colunas por CNPJ_FUNDO,
+        no mesmo shape de `correlacao`.
+    """
+
+    if correlacao is None or correlacao.empty:
+        return pd.DataFrame()
+
+    cnpjs = list(correlacao.columns)
+
+    # Sem pesos informados: distribui igualmente entre os fundos
+    # (mesmo comportamento padrão usado na tela de Portfólio).
+    if not pesos:
+        peso_igual = 1 / len(cnpjs) if cnpjs else 0
+        pesos = {cnpj: peso_igual for cnpj in cnpjs}
+
+    covariancia = pd.DataFrame(index=cnpjs, columns=cnpjs, dtype=float)
+
+    for cnpj_i in cnpjs:
+        vol_i = volatilidades.get(cnpj_i)
+        peso_i = pesos.get(cnpj_i, 0.0)
+
+        for cnpj_j in cnpjs:
+            vol_j = volatilidades.get(cnpj_j)
+            peso_j = pesos.get(cnpj_j, 0.0)
+
+            corr_ij = correlacao.loc[cnpj_i, cnpj_j]
+
+            if vol_i is None or vol_j is None or pd.isna(corr_ij):
+                covariancia.loc[cnpj_i, cnpj_j] = None
+                continue
+
+            # Percentual -> fração decimal (15.0 -> 0.15)
+            vol_i_fracao = vol_i / 100
+            vol_j_fracao = vol_j / 100
+
+            covariancia.loc[cnpj_i, cnpj_j] = (
+                corr_ij * vol_i_fracao * vol_j_fracao * peso_i * peso_j
+            )
+
+    return covariancia
+
 def portfolio(
     fundos: pd.DataFrame,
     pesos: dict[str, float] | None = None,
     data_referencia: str | pd.Timestamp | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Calcula rentabilidade, volatilidade e a matriz de correlação dos
-    fundos informados, com base nos 756 pregões anteriores à
-    `data_referencia` (ou hoje, se não informada).
+    Calcula rentabilidade, volatilidade, a matriz de correlação e a
+    matriz de covariância dos fundos informados, com base nos 756
+    pregões anteriores à `data_referencia` (ou hoje, se não informada).
 
     Se a `data_referencia` cair em um dia não útil (fim de semana,
     feriado) ou não existir cota do fundo naquele dia, o cálculo já
     considera automaticamente a última data disponível anterior — ver
     `carregar_historico_36meses`.
 
-    `pesos` (CNPJ -> peso, somando 1.0) ainda não é utilizado no cálculo;
-    fica reservado para quando o retorno ponderado do portfólio como um
-    todo for implementado.
+    A matriz de covariância é calculada a partir da correlação entre os
+    fundos, multiplicada pela volatilidade e pelo peso de cada par de
+    fundos (ver `calcular_covariancia`). Sem `pesos` informado, assume
+    peso igual entre todos os fundos.
 
     Retorno
     -------
-    tuple[pd.DataFrame, pd.DataFrame]
-        (resultado_por_fundo, matriz_de_correlacao)
+    tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+        (resultado_por_fundo, matriz_de_correlacao, matriz_de_covariancia)
     """
 
     base_cotas = carregar_historico_36meses(fundos, data_referencia=data_referencia)
@@ -219,6 +303,7 @@ def portfolio(
                 ]
             ),
             correlacao,
+            pd.DataFrame(),
         )
 
     resultados = []
@@ -265,5 +350,14 @@ def portfolio(
 
     resultado = pd.DataFrame(resultados)
 
-    return resultado, correlacao
+    # Covariância = correlação x volatilidade x peso de cada par de
+    # fundos. Precisa da volatilidade por fundo (calculada acima), por
+    # isso só é calculada aqui, depois do loop.
+    volatilidades = (
+        resultado.set_index("CNPJ_FUNDO")["VOLATILIDADE"].to_dict()
+        if not resultado.empty
+        else {}
+    )
+    covariancia = calcular_covariancia(correlacao, volatilidades, pesos)
 
+    return resultado, correlacao, covariancia

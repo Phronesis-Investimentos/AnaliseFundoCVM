@@ -32,7 +32,11 @@ def _autofit_colunas(ws, largura_min=10, largura_max=45):
             ws.column_dimensions[letra_coluna].width = largura
 
 
-def _montar_aba_portfolio(wb: Workbook, fundos: list[dict], data_referencia: str | None) -> None:
+def _montar_aba_portfolio(
+    wb: Workbook,
+    fundos: list[dict],
+    data_referencia: str | None,
+) -> None:
     ws = wb.active
     ws.title = "Portfólio"
 
@@ -189,15 +193,75 @@ def _montar_aba_correlacao(wb: Workbook, fundos: list[dict], correlacao: dict) -
     _autofit_colunas(ws, largura_min=10, largura_max=22)
 
 
+def _montar_aba_covariancia(
+    wb: Workbook,
+    fundos: list[dict],
+    covariancia: dict,
+) -> None:
+    """
+    Mesmo layout da aba de Correlação, mas com a matriz de covariância
+    calculada como correlacao(i,j) * volatilidade(i) * volatilidade(j)
+    * peso(i) * peso(j) — ou seja, o valor "real" (não normalizado
+    entre -1 e 1) de cada par de fundos, já ponderado pelo peso de cada
+    um no portfólio.
+    """
+    if not fundos or not covariancia:
+        return
+
+    ws = wb.create_sheet("Covariância")
+    fonte_padrao = "Arial"
+
+    ws["A1"] = "Matriz de Covariância (correlação × volatilidade × peso)"
+    ws["A1"].font = Font(name=fonte_padrao, size=14, bold=True, color=COR_NEON)
+
+    linha_cabecalho = 3
+
+    cnpjs = [f["cnpj"] for f in fundos]
+    nomes = {f["cnpj"]: f.get("nome", f["cnpj"]) for f in fundos}
+
+    coluna_inicial = 2  # deixa a coluna A para o nome das linhas
+
+    # Cabeçalho (nomes dos fundos nas colunas)
+    for idx, cnpj in enumerate(cnpjs):
+        celula = ws.cell(row=linha_cabecalho, column=coluna_inicial + idx, value=nomes[cnpj])
+        celula.font = Font(name=fonte_padrao, size=9, bold=True, color=COR_HEADER_TEXTO)
+        celula.fill = PatternFill(start_color=COR_NEON, end_color=COR_NEON, fill_type="solid")
+        celula.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    primeira_linha_dados = linha_cabecalho + 1
+
+    for lin_idx, cnpj_linha in enumerate(cnpjs):
+        linha = primeira_linha_dados + lin_idx
+
+        cel_nome = ws.cell(row=linha, column=1, value=nomes[cnpj_linha])
+        cel_nome.fill = PatternFill(start_color=COR_NEON, end_color=COR_NEON, fill_type="solid")
+        cel_nome.font = Font(name=fonte_padrao, size=9, bold=True, color=COR_HEADER_TEXTO)
+
+        for col_idx, cnpj_coluna in enumerate(cnpjs):
+            valor = covariancia.get(cnpj_coluna, {}).get(cnpj_linha)
+            cel = ws.cell(row=linha, column=coluna_inicial + col_idx)
+            if valor is not None:
+                cel.value = round(float(valor), 4)
+                cel.number_format = "0.00"
+            else:
+                cel.value = "—"
+            cel.alignment = Alignment(horizontal="center")
+            cel.font = Font(name=fonte_padrao, size=9)
+
+    ws.freeze_panes = ws.cell(row=primeira_linha_dados, column=coluna_inicial).coordinate
+    _autofit_colunas(ws, largura_min=10, largura_max=22)
+
+
 def gerar_excel_portfolio(
     fundos: list[dict],
     correlacao: dict | None = None,
+    covariancia: dict | None = None,
     data_referencia: str | None = None,
 ) -> io.BytesIO:
     """
     Gera um arquivo .xlsx com a composição do portfólio (CNPJ, nome,
-    rentabilidade, volatilidade e peso) e, em uma segunda aba, a matriz
-    de correlação entre os fundos selecionados.
+    rentabilidade, volatilidade e peso) e, em abas separadas, a matriz
+    de correlação e a matriz de covariância entre os fundos selecionados.
 
     Parâmetros
     ----------
@@ -207,6 +271,10 @@ def gerar_excel_portfolio(
     correlacao : dict | None
         Matriz de correlação no formato { cnpj_coluna: { cnpj_linha: valor } },
         mesmo shape retornado por /api/portfolio/gerar.
+    covariancia : dict | None
+        Matriz de covariância, mesmo shape de `correlacao`: cada célula é
+        correlacao(i,j) * volatilidade(i) * volatilidade(j) * peso(i) *
+        peso(j) — o valor "real" (não normalizado) de cada par de fundos.
     data_referencia : str | None
         Data de referência usada no cálculo (apenas informativo no arquivo).
 
@@ -219,6 +287,7 @@ def gerar_excel_portfolio(
 
     _montar_aba_portfolio(wb, fundos, data_referencia)
     _montar_aba_correlacao(wb, fundos, correlacao or {})
+    _montar_aba_covariancia(wb, fundos, covariancia or {})
 
     buffer = io.BytesIO()
     wb.save(buffer)

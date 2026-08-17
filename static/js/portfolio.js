@@ -188,17 +188,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const painelResultado = document.getElementById('painel_resultado_portfolio');
     const painelCorrelacao = document.getElementById('painel_correlacao_portfolio');
+    const painelCovariancia = document.getElementById('painel_covariancia_portfolio');
     const painelEstadoVazio = document.getElementById('painel_estado_vazio');
     const tabelaBody = document.getElementById('tabela_portfolio_body');
     const tabelaCorrelacao = document.getElementById('tabela_correlacao');
+    const tabelaCovariancia = document.getElementById('tabela_covariancia');
     const contagemResultado = document.getElementById('portfolio_resultado_contagem');
     const somaPesosBox = document.getElementById('portfolio_soma_pesos');
     const somaPesosValor = document.getElementById('portfolio_soma_pesos_valor');
     const btnDistribuirIgual = document.getElementById('btn_distribuir_pesos_igual');
     const btnExportarPortfolio = document.getElementById('btn_exportar_portfolio');
 
-    // Guarda o último resultado vindo da API para poder re-renderizar
-    // (ex: ao remover um fundo da tabela) sem precisar chamar de novo.
+    // Guarda o último resultado vindo da API (fundos + correlação) para
+    // poder re-renderizar (ex: ao remover um fundo da tabela) sem
+    // precisar chamar a API de novo.
     let ultimoResultado = { fundos: [], correlacao: {} };
 
     async function chamarApiPortfolio(cnpjs, dataReferencia) {
@@ -255,7 +258,125 @@ document.addEventListener("DOMContentLoaded", () => {
             somaPesosBox.classList.add('text-[#ff3366]', 'border-[#ff3366]/30', 'bg-[#ff3366]/10');
         }
 
+        atualizarMatrizCovariancia();
+
         return fechou100;
+    }
+
+    // ---- Matriz de covariância (recalculada no cliente sempre que um
+    // peso muda, para exibir/exportar exatamente o que está na tela:
+    // cada célula = correlacao(i,j) * vol(i) * vol(j) * peso(i) * peso(j).
+    // vol e peso entram como FRAÇÃO decimal (ex: 15% -> 0.15), não como
+    // percentual — senão o resultado explode e passa de 1. ----
+
+    function calcularCovarianciaAtual() {
+        const correlacao = ultimoResultado.correlacao;
+        if (!correlacao || Object.keys(correlacao).length === 0) return {};
+
+        const volatilidades = Object.fromEntries(
+            ultimoResultado.fundos.map(f => [f.cnpj, f.volatilidade_36m])
+        );
+
+        const inputs = tabelaBody.querySelectorAll('input[data-peso-cnpj]');
+        const pesos = {};
+        inputs.forEach(input => {
+            pesos[input.dataset.pesoCnpj] = (parseFloat(input.value) || 0) / 100;
+        });
+
+        const cnpjs = Object.keys(correlacao);
+        const covariancia = {};
+
+        cnpjs.forEach(cnpjColuna => {
+            covariancia[cnpjColuna] = {};
+            cnpjs.forEach(cnpjLinha => {
+                const corrIJ = correlacao?.[cnpjColuna]?.[cnpjLinha];
+                const volI = volatilidades[cnpjLinha];
+                const volJ = volatilidades[cnpjColuna];
+                const pesoI = pesos[cnpjLinha];
+                const pesoJ = pesos[cnpjColuna];
+
+                if (corrIJ === null || corrIJ === undefined || isNaN(corrIJ)
+                    || volI === undefined || volJ === undefined
+                    || pesoI === undefined || pesoJ === undefined) {
+                    covariancia[cnpjColuna][cnpjLinha] = null;
+                    return;
+                }
+
+                // Percentual -> fração decimal (15.0 -> 0.15)
+                const volIFracao = volI / 100;
+                const volJFracao = volJ / 100;
+
+                covariancia[cnpjColuna][cnpjLinha] = corrIJ * volIFracao * volJFracao * pesoI * pesoJ;
+            });
+        });
+
+        return covariancia;
+    }
+
+    // Cor de fundo da célula de covariância (mesma lógica da correlação,
+    // mas a escala vai de -1 a 1 no teor "cru" da fórmula — na prática os
+    // valores costumam ficar bem menores, então a intensidade da cor é
+    // proporcional ao valor absoluto)
+    const corCelulaCovariancia = (valor) => {
+        if (valor === null || valor === undefined || isNaN(valor)) {
+            return 'background: rgba(255,255,255,0.02); color: #6b7280;';
+        }
+        if (valor >= 0) {
+            const alpha = Math.min(0.06 + valor * 2, 0.85);
+            return `background: rgba(0, 255, 136, ${alpha.toFixed(2)}); color: #eafff2;`;
+        }
+        const alpha = Math.min(0.06 + Math.abs(valor) * 2, 0.85);
+        return `background: rgba(255, 51, 102, ${alpha.toFixed(2)}); color: #ffe9ee;`;
+    };
+
+    function renderizarMatrizCovariancia() {
+        if (!tabelaCovariancia || !painelCovariancia) return;
+
+        const fundos = ultimoResultado.fundos || [];
+        const covariancia = calcularCovarianciaAtual();
+
+        tabelaCovariancia.innerHTML = '';
+
+        const cnpjs = fundos.map(f => f.cnpj);
+        const nomeCurto = (nome) => nome.length > 18 ? nome.slice(0, 18) + '…' : nome;
+        const mapaNomes = Object.fromEntries(fundos.map(f => [f.cnpj, f.nome]));
+
+        if (cnpjs.length < 2 || !covariancia || Object.keys(covariancia).length === 0) {
+            painelCovariancia.classList.add('hidden');
+            return;
+        }
+
+        // Cabeçalho
+        const thead = document.createElement('thead');
+        const trHead = document.createElement('tr');
+        trHead.innerHTML = `<th class="p-2"></th>` + cnpjs.map(cnpj =>
+            `<th class="p-2 font-medium text-gray-400 text-[10px] max-w-[90px]" title="${mapaNomes[cnpj]}">${nomeCurto(mapaNomes[cnpj])}</th>`
+        ).join('');
+        thead.appendChild(trHead);
+        tabelaCovariancia.appendChild(thead);
+
+        // Corpo
+        const tbody = document.createElement('tbody');
+        cnpjs.forEach(cnpjLinha => {
+            const tr = document.createElement('tr');
+            let linhaHtml = `<th class="p-2 font-medium text-gray-400 text-[10px] text-right max-w-[110px] truncate" title="${mapaNomes[cnpjLinha]}">${nomeCurto(mapaNomes[cnpjLinha])}</th>`;
+
+            cnpjs.forEach(cnpjColuna => {
+                const valor = covariancia?.[cnpjColuna]?.[cnpjLinha];
+                const texto = (valor === null || valor === undefined || isNaN(valor)) ? '—' : valor.toFixed(4);
+                linhaHtml += `<td class="p-2 rounded-lg font-medium min-w-[52px]" style="${corCelulaCovariancia(valor)}">${texto}</td>`;
+            });
+
+            tr.innerHTML = linhaHtml;
+            tbody.appendChild(tr);
+        });
+        tabelaCovariancia.appendChild(tbody);
+
+        painelCovariancia.classList.remove('hidden');
+    }
+
+    function atualizarMatrizCovariancia() {
+        renderizarMatrizCovariancia();
     }
 
     btnDistribuirIgual.addEventListener('click', distribuirPesosIgualmente);
@@ -284,6 +405,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify({
                     fundos: coletarFundosComPesoAtual(),
                     correlacao: ultimoResultado.correlacao,
+                    covariancia: calcularCovarianciaAtual(),
                     data_referencia: inputDataReferencia.value,
                 }),
             });
@@ -321,6 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (fundosPortfolio.length === 0) {
             painelResultado.classList.add('hidden');
             painelCorrelacao.classList.add('hidden');
+            if (painelCovariancia) painelCovariancia.classList.add('hidden');
             painelEstadoVazio.classList.remove('hidden');
             return;
         }
@@ -428,6 +551,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!resultado.fundos || resultado.fundos.length === 0) {
             painelResultado.classList.add('hidden');
             painelCorrelacao.classList.add('hidden');
+            if (painelCovariancia) painelCovariancia.classList.add('hidden');
             painelEstadoVazio.classList.remove('hidden');
             return;
         }
