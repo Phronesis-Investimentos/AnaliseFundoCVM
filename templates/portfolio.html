@@ -128,6 +128,9 @@
                             <th class="px-4 py-3 font-medium text-gray-400 text-right">Rentabilidade (36m)</th>
                             <th class="px-4 py-3 font-medium text-gray-400 text-center">Volatilidade (36m)</th>
                             <th class="px-4 py-3 font-medium text-gray-400 text-center">Peso</th>
+                            <th class="px-4 py-3 font-medium text-gray-400 text-center" title="Soma da coluna do fundo na matriz de covariância ÷ soma total da matriz">Risk Attribution</th>
+                            <th class="px-4 py-3 font-medium text-gray-400 text-center" title="Rentabilidade (36m) × peso">Attribution</th>
+                            <th class="px-4 py-3 font-medium text-gray-400 text-center" title="Attribution ÷ |Risco Atribuído|">Attribution / Risk</th>
                             <th class="px-4 py-3 font-medium text-gray-400 text-center w-10"></th>
                         </tr>
                     </thead>
@@ -159,6 +162,7 @@
                 </div>
                 <h3 class="text-xl font-semibold">Matriz de Correlação</h3>
             </div>
+
             <div id="correlacao_wrapper" class="overflow-x-auto rounded-2xl border border-white/10 bg-black/40 p-4">
                 <table id="tabela_correlacao" class="text-center text-xs border-separate" style="border-spacing: 4px;">
                     <!-- JS -->
@@ -174,6 +178,7 @@
                 </div>
                 <h3 class="text-xl font-semibold">Matriz de Covariância</h3>
             </div>
+
             <div id="covariancia_wrapper" class="overflow-x-auto rounded-2xl border border-white/10 bg-black/40 p-4">
                 <table id="tabela_covariancia" class="text-center text-xs border-separate" style="border-spacing: 4px;">
                     <!-- JS -->

@@ -259,6 +259,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         atualizarMatrizCovariancia();
+        atualizarColunasAttribution();
 
         return fechou100;
     }
@@ -311,6 +312,101 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         return covariancia;
+    }
+
+    // ---- Risk Attribution: soma da coluna de cada fundo na matriz de
+    // covariância, dividida pela soma total da matriz. Recalculado a
+    // partir da mesma matriz de covariância já ao vivo (calculada acima),
+    // então acompanha qualquer mudança de peso automaticamente. ----
+
+    function calcularRiskAttribution(covariancia) {
+        if (!covariancia || Object.keys(covariancia).length === 0) return {};
+
+        const cnpjs = Object.keys(covariancia);
+
+        let somaTotal = 0;
+        cnpjs.forEach(cnpjColuna => {
+            cnpjs.forEach(cnpjLinha => {
+                const valor = covariancia?.[cnpjColuna]?.[cnpjLinha];
+                if (valor !== null && valor !== undefined && !isNaN(valor)) {
+                    somaTotal += valor;
+                }
+            });
+        });
+
+        const riscoAtribuido = {};
+        cnpjs.forEach(cnpjColuna => {
+            let somaColuna = 0;
+            cnpjs.forEach(cnpjLinha => {
+                const valor = covariancia?.[cnpjColuna]?.[cnpjLinha];
+                if (valor !== null && valor !== undefined && !isNaN(valor)) {
+                    somaColuna += valor;
+                }
+            });
+            riscoAtribuido[cnpjColuna] = somaTotal !== 0 ? (somaColuna / somaTotal) * 100 : null;
+        });
+
+        return riscoAtribuido;
+    }
+
+    // ---- Attribution: rentabilidade (36m) x peso de cada fundo ----
+
+    function calcularAttributionAtual() {
+        const inputs = tabelaBody.querySelectorAll('input[data-peso-cnpj]');
+        const attribution = {};
+
+        inputs.forEach(input => {
+            const cnpj = input.dataset.pesoCnpj;
+            const peso = (parseFloat(input.value) || 0) / 100;
+            const fundo = ultimoResultado.fundos.find(f => f.cnpj === cnpj);
+            if (!fundo || fundo.rentabilidade_36m === null || fundo.rentabilidade_36m === undefined) {
+                attribution[cnpj] = null;
+                return;
+            }
+            attribution[cnpj] = fundo.rentabilidade_36m * peso;
+        });
+
+        return attribution;
+    }
+
+    // ---- Attribution / |Risk Attribution| e atualização das duas
+    // colunas na tabela principal. Roda sempre que o peso muda, junto
+    // com a matriz de covariância (que o Risk Attribution depende). ----
+
+    function atualizarColunasAttribution() {
+        const covariancia = calcularCovarianciaAtual();
+        const riscoAtribuido = calcularRiskAttribution(covariancia);
+        const attribution = calcularAttributionAtual();
+
+        tabelaBody.querySelectorAll('[data-risco-atribuido-cnpj]').forEach(celula => {
+            const cnpj = celula.dataset.riscoAtribuidoCnpj;
+            const valor = riscoAtribuido[cnpj];
+            celula.textContent = (valor === null || valor === undefined || isNaN(valor))
+                ? '—'
+                : `${valor.toFixed(2)}%`;
+        });
+
+        tabelaBody.querySelectorAll('[data-attribution-cnpj]').forEach(celula => {
+            const cnpj = celula.dataset.attributionCnpj;
+            const valor = attribution[cnpj];
+            celula.textContent = (valor === null || valor === undefined || isNaN(valor))
+                ? '—'
+                : `${valor.toFixed(2)}%`;
+        });
+
+        tabelaBody.querySelectorAll('[data-attribution-risco-cnpj]').forEach(celula => {
+            const cnpj = celula.dataset.attributionRiscoCnpj;
+            const attr = attribution[cnpj];
+            const risco = riscoAtribuido[cnpj];
+
+            let valor = null;
+            if (attr !== null && attr !== undefined && !isNaN(attr)
+                && risco !== null && risco !== undefined && !isNaN(risco) && risco !== 0) {
+                valor = attr / Math.abs(risco);
+            }
+
+            celula.textContent = (valor === null) ? '—' : valor.toFixed(4);
+        });
     }
 
     // Cor de fundo da célula de covariância (mesma lógica da correlação,
@@ -372,6 +468,21 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         tabelaCovariancia.appendChild(tbody);
 
+        // Rodapé: Risk Attribution de cada fundo (soma da coluna / soma
+        // total da matriz), logo abaixo da matriz.
+        const riscoAtribuido = calcularRiskAttribution(covariancia);
+        const tfoot = document.createElement('tfoot');
+        const trFoot = document.createElement('tr');
+        let footHtml = `<th class="p-2 pt-4 font-semibold text-white text-[10px] text-right border-t border-white/10">Risco Atribuído</th>`;
+        cnpjs.forEach(cnpj => {
+            const valor = riscoAtribuido[cnpj];
+            const texto = (valor === null || valor === undefined || isNaN(valor)) ? '—' : `${valor.toFixed(2)}%`;
+            footHtml += `<td class="p-2 pt-4 font-semibold text-neon border-t border-white/10">${texto}</td>`;
+        });
+        trFoot.innerHTML = footHtml;
+        tfoot.appendChild(trFoot);
+        tabelaCovariancia.appendChild(tfoot);
+
         painelCovariancia.classList.remove('hidden');
     }
 
@@ -387,10 +498,28 @@ document.addEventListener("DOMContentLoaded", () => {
         // Usa os dados já carregados (ultimoResultado) + o peso que está
         // atualmente digitado em cada linha da tabela, pra exportar
         // exatamente o que o usuário está vendo na tela.
+        const covariancia = calcularCovarianciaAtual();
+        const riscoAtribuido = calcularRiskAttribution(covariancia);
+        const attribution = calcularAttributionAtual();
+
         return ultimoResultado.fundos.map(fundo => {
             const input = tabelaBody.querySelector(`input[data-peso-cnpj="${fundo.cnpj}"]`);
             const peso = input ? parseFloat(input.value) || 0 : null;
-            return { ...fundo, peso };
+
+            const risco = riscoAtribuido[fundo.cnpj];
+            const attr = attribution[fundo.cnpj];
+            const attrPorRisco = (
+                attr !== null && attr !== undefined && !isNaN(attr)
+                && risco !== null && risco !== undefined && !isNaN(risco) && risco !== 0
+            ) ? attr / Math.abs(risco) : null;
+
+            return {
+                ...fundo,
+                peso,
+                risco_atribuido: risco ?? null,
+                attribution: attr ?? null,
+                attribution_por_risco: attrPorRisco,
+            };
         });
     }
 
@@ -484,6 +613,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         <span class="absolute right-2 text-xs text-gray-500 pointer-events-none">%</span>
                     </div>
                 </td>
+                <td class="px-4 py-4 text-center text-sm" data-risco-atribuido-cnpj="${fundo.cnpj}">—</td>
+                <td class="px-4 py-4 text-center text-sm" data-attribution-cnpj="${fundo.cnpj}">—</td>
+                <td class="px-4 py-4 text-center text-sm" data-attribution-risco-cnpj="${fundo.cnpj}">—</td>
                 <td class="px-4 py-4 text-center">
                     <i class="ph ph-trash text-gray-500 hover:text-[#ff3366] cursor-pointer transition-colors" data-cnpj="${fundo.cnpj}"></i>
                 </td>`;

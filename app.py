@@ -279,6 +279,21 @@ def gerar_portfolio():
             "nome": linha["DENOM_SOCIAL"],
             "rentabilidade_36m": round(linha["RENTABILIDADE"], 2),
             "volatilidade_36m": round(linha["VOLATILIDADE"], 2),
+            "risco_atribuido": (
+                round(linha["RISCO_ATRIBUIDO"], 2)
+                if pd.notnull(linha.get("RISCO_ATRIBUIDO"))
+                else None
+            ),
+            "attribution": (
+                round(linha["ATTRIBUTION"], 2)
+                if pd.notnull(linha.get("ATTRIBUTION"))
+                else None
+            ),
+            "attribution_por_risco": (
+                round(linha["ATTRIBUTION_POR_RISCO"], 4)
+                if pd.notnull(linha.get("ATTRIBUTION_POR_RISCO"))
+                else None
+            ),
         }
         for _, linha in resultado.iterrows()
     ]

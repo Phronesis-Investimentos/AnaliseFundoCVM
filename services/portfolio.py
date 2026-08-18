@@ -177,7 +177,7 @@ def calcular_correlacao(base_cotas: pd.DataFrame) -> pd.DataFrame:
     return correlacao
 
 def calcular_covariancia(
-    correlacao: pd.DataFrame,
+    base_cotas: pd.DataFrame,
     volatilidades: dict[str, float],
     pesos: dict[str, float] | None = None,
 ) -> pd.DataFrame:
@@ -186,6 +186,12 @@ def calcular_covariancia(
     simples de covariância a partir da correlação:
 
         cov(i, j) = correlacao(i, j) * vol(i) * vol(j) * peso(i) * peso(j)
+
+    A correlação usada aqui vem diretamente de `calcular_correlacao`
+    (mesma função usada para a aba/matriz de Correlação) — ou seja,
+    `calcular_covariancia` recebe a mesma entrada que `calcular_correlacao`
+    (`base_cotas`) e reaproveita ela por dentro, ao invés de receber uma
+    matriz de correlação já pronta de fora.
 
     Ou seja, mesma estrutura/shape da matriz de correlação (CNPJ x
     CNPJ), mas com o valor "real" (não normalizado entre -1 e 1): cada
@@ -202,9 +208,10 @@ def calcular_covariancia(
 
     Parâmetros
     ----------
-    correlacao : pd.DataFrame
-        Matriz de correlação entre os fundos (ver `calcular_correlacao`),
-        indexada e com colunas por CNPJ_FUNDO.
+    base_cotas : pd.DataFrame
+        DataFrame contendo CNPJ_FUNDO, DT_COMPTC e VL_QUOTA — mesma
+        entrada usada por `calcular_correlacao`. A correlação é
+        calculada aqui dentro chamando `calcular_correlacao(base_cotas)`.
     volatilidades : dict[str, float]
         CNPJ_FUNDO -> volatilidade anualizada em PERCENTUAL (mesma escala
         de VOLATILIDADE, ex.: 15.0 = 15%). É convertida para fração
@@ -219,8 +226,10 @@ def calcular_covariancia(
     -------
     pd.DataFrame
         Matriz de covariância, indexada e com colunas por CNPJ_FUNDO,
-        no mesmo shape de `correlacao`.
+        no mesmo shape da matriz de correlação.
     """
+
+    correlacao = calcular_correlacao(base_cotas)
 
     if correlacao is None or correlacao.empty:
         return pd.DataFrame()
@@ -259,6 +268,140 @@ def calcular_covariancia(
 
     return covariancia
 
+
+def calcular_risk_attribution(covariancia: pd.DataFrame) -> pd.Series:
+    """
+    Calcula o "Risk Attribution" (risco atribuído) de cada fundo dentro
+    do portfólio: para cada fundo, soma a coluna dele na matriz de
+    covariância e divide pela soma total de todas as células da matriz.
+
+        risco_atribuido(i) = soma_coluna(i) / soma_total(matriz)
+
+    O resultado vem em pontos percentuais (soma de todos os fundos =
+    100%, exceto arredondamento) — quanto maior, maior a contribuição
+    daquele fundo para o risco (covariância) total do portfólio.
+
+    Parâmetros
+    ----------
+    covariancia : pd.DataFrame
+        Matriz de covariância (ver `calcular_covariancia`), indexada e
+        com colunas por CNPJ_FUNDO.
+
+    Retorno
+    -------
+    pd.Series
+        Índice = CNPJ_FUNDO, valor = risco atribuído em percentual
+        (ex.: 35.0 = 35%). Série vazia se a matriz de covariância
+        estiver vazia ou se a soma total for zero.
+    """
+
+    if covariancia is None or covariancia.empty:
+        return pd.Series(dtype=float)
+
+    soma_colunas = covariancia.sum(axis=0, skipna=True)
+    soma_total = covariancia.to_numpy(dtype=float).sum()
+
+    if soma_total == 0 or pd.isna(soma_total):
+        return pd.Series(0.0, index=covariancia.columns)
+
+    return (soma_colunas / soma_total) * 100
+
+
+def calcular_attribution(
+    resultado: pd.DataFrame,
+    pesos: dict[str, float] | None = None,
+) -> pd.Series:
+    """
+    Calcula o "Attribution" (atribuição de retorno) de cada fundo dentro
+    do portfólio: a rentabilidade de 36 meses do fundo multiplicada pelo
+    peso dele no portfólio.
+
+        attribution(i) = rentabilidade(i) * peso(i)
+
+    Ou seja, quanto cada fundo efetivamente contribuiu (em pontos
+    percentuais) para o retorno do portfólio como um todo.
+
+    Parâmetros
+    ----------
+    resultado : pd.DataFrame
+        DataFrame com CNPJ_FUNDO e RENTABILIDADE (ver `portfolio`).
+    pesos : dict[str, float] | None
+        CNPJ_FUNDO -> peso (fração, ex.: 0.25 para 25%). Se None, ou se
+        um fundo não tiver peso informado, assume peso igual entre
+        todos os fundos de `resultado`.
+
+    Retorno
+    -------
+    pd.Series
+        Índice = CNPJ_FUNDO, valor = attribution em pontos percentuais
+        (ex.: rentabilidade 12% * peso 50% = 6.0). Série vazia se
+        `resultado` estiver vazio.
+    """
+
+    if resultado is None or resultado.empty:
+        return pd.Series(dtype=float)
+
+    cnpjs = resultado["CNPJ_FUNDO"].tolist()
+
+    # Sem pesos informados: distribui igualmente entre os fundos
+    # (mesmo comportamento padrão usado no restante do módulo).
+    if not pesos:
+        peso_igual = 1 / len(cnpjs) if cnpjs else 0
+        pesos = {cnpj: peso_igual for cnpj in cnpjs}
+
+    rentabilidades = resultado.set_index("CNPJ_FUNDO")["RENTABILIDADE"]
+    pesos_series = pd.Series({cnpj: pesos.get(cnpj, 0.0) for cnpj in cnpjs})
+
+    return rentabilidades * pesos_series
+
+
+def calcular_indice_attribution_risco(
+    attribution: pd.Series,
+    risco_atribuido: pd.Series,
+) -> pd.Series:
+    """
+    Divide o Attribution de cada fundo pelo módulo (valor absoluto) do
+    Risk Attribution do mesmo fundo:
+
+        indice(i) = attribution(i) / abs(risco_atribuido(i))
+
+    Serve como uma medida de "retorno entregue por unidade de risco
+    atribuído": quanto maior, mais retorno o fundo trouxe pra cada ponto
+    de risco que ele adicionou ao portfólio.
+
+    Parâmetros
+    ----------
+    attribution : pd.Series
+        Índice = CNPJ_FUNDO, valor = attribution (ver
+        `calcular_attribution`).
+    risco_atribuido : pd.Series
+        Índice = CNPJ_FUNDO, valor = risco atribuído em percentual (ver
+        `calcular_risk_attribution`).
+
+    Retorno
+    -------
+    pd.Series
+        Índice = CNPJ_FUNDO, valor = attribution / |risco_atribuido|.
+        Fica None para fundos cujo risco atribuído seja 0, ausente ou
+        que não existam em ambas as séries.
+    """
+
+    if attribution is None or attribution.empty or risco_atribuido is None or risco_atribuido.empty:
+        return pd.Series(dtype=float)
+
+    indice = pd.Series(index=attribution.index, dtype=float)
+
+    for cnpj in attribution.index:
+        risco = risco_atribuido.get(cnpj)
+
+        if risco is None or pd.isna(risco) or risco == 0:
+            indice.loc[cnpj] = None
+            continue
+
+        indice.loc[cnpj] = attribution.loc[cnpj] / abs(risco)
+
+    return indice
+
 def portfolio(
     fundos: pd.DataFrame,
     pesos: dict[str, float] | None = None,
@@ -278,6 +421,11 @@ def portfolio(
     fundos, multiplicada pela volatilidade e pelo peso de cada par de
     fundos (ver `calcular_covariancia`). Sem `pesos` informado, assume
     peso igual entre todos os fundos.
+
+    O `resultado_por_fundo` também traz a coluna RISCO_ATRIBUIDO: o
+    percentual de contribuição de cada fundo para o risco total do
+    portfólio (soma da coluna do fundo na matriz de covariância dividida
+    pela soma total da matriz — ver `calcular_risk_attribution`).
 
     Retorno
     -------
@@ -358,6 +506,29 @@ def portfolio(
         if not resultado.empty
         else {}
     )
-    covariancia = calcular_covariancia(correlacao, volatilidades, pesos)
+    covariancia = calcular_covariancia(base_cotas, volatilidades, pesos)
+
+    # Risk attribution: soma da coluna de cada fundo na matriz de
+    # covariância, dividida pela soma total da matriz.
+    risco_atribuido = calcular_risk_attribution(covariancia)
+    if not resultado.empty and not risco_atribuido.empty:
+        resultado["RISCO_ATRIBUIDO"] = resultado["CNPJ_FUNDO"].map(risco_atribuido)
+    elif not resultado.empty:
+        resultado["RISCO_ATRIBUIDO"] = None
+
+    # Attribution: rentabilidade de 36 meses do fundo x peso do fundo.
+    attribution = calcular_attribution(resultado, pesos)
+    if not resultado.empty and not attribution.empty:
+        resultado["ATTRIBUTION"] = resultado["CNPJ_FUNDO"].map(attribution)
+    elif not resultado.empty:
+        resultado["ATTRIBUTION"] = None
+
+    # Attribution / |Risk Attribution|: retorno entregue por unidade de
+    # risco atribuído.
+    indice_attribution_risco = calcular_indice_attribution_risco(attribution, risco_atribuido)
+    if not resultado.empty and not indice_attribution_risco.empty:
+        resultado["ATTRIBUTION_POR_RISCO"] = resultado["CNPJ_FUNDO"].map(indice_attribution_risco)
+    elif not resultado.empty:
+        resultado["ATTRIBUTION_POR_RISCO"] = None
 
     return resultado, correlacao, covariancia

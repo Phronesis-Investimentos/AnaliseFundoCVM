@@ -51,7 +51,10 @@ def _montar_aba_portfolio(
     ws["A2"].font = Font(name=fonte_padrao, size=9, italic=True, color="666666")
 
     linha_cabecalho = 4
-    colunas = ["CNPJ", "Nome do Fundo", "Rentabilidade (36m)", "Volatilidade (36m)", "Peso"]
+    colunas = [
+        "CNPJ", "Nome do Fundo", "Rentabilidade (36m)", "Volatilidade (36m)",
+        "Peso", "Risco Atribuído", "Attribution", "Attribution / Risco",
+    ]
 
     for idx, titulo in enumerate(colunas, start=1):
         celula = ws.cell(row=linha_cabecalho, column=idx, value=titulo)
@@ -100,7 +103,46 @@ def _montar_aba_portfolio(
         cel_peso.font = Font(name=fonte_padrao, size=10)
         cel_peso.alignment = Alignment(horizontal="center")
 
-        for col in range(1, 6):
+        # Risco Atribuído (soma da coluna do fundo na matriz de
+        # covariância ÷ soma total da matriz)
+        risco_atribuido = fundo.get("risco_atribuido")
+        cel_risco = ws.cell(row=linha, column=6)
+        if risco_atribuido is not None:
+            cel_risco.value = round(float(risco_atribuido), 4) / 100
+            cel_risco.number_format = "0.00%"
+            cel_risco.font = Font(name=fonte_padrao, size=10)
+        else:
+            cel_risco.value = "—"
+            cel_risco.font = Font(name=fonte_padrao, size=10, italic=True, color="999999")
+        cel_risco.alignment = Alignment(horizontal="center")
+
+        # Attribution = rentabilidade (36m) x peso
+        attribution = fundo.get("attribution")
+        cel_attribution = ws.cell(row=linha, column=7)
+        if attribution is not None:
+            cel_attribution.value = round(float(attribution), 4) / 100
+            cel_attribution.number_format = "0.00%"
+            cor = COR_POSITIVO if attribution >= 0 else COR_NEGATIVO
+            cel_attribution.font = Font(name=fonte_padrao, size=10, color=cor)
+        else:
+            cel_attribution.value = "—"
+            cel_attribution.font = Font(name=fonte_padrao, size=10, italic=True, color="999999")
+        cel_attribution.alignment = Alignment(horizontal="center")
+
+        # Attribution / |Risk Attribution|
+        attribution_por_risco = fundo.get("attribution_por_risco")
+        cel_attr_risco = ws.cell(row=linha, column=8)
+        if attribution_por_risco is not None:
+            cel_attr_risco.value = round(float(attribution_por_risco), 4)
+            cel_attr_risco.number_format = "0.0000"
+        else:
+            cel_attr_risco.value = "—"
+            cel_attr_risco.font = Font(name=fonte_padrao, size=10, italic=True, color="999999")
+        cel_attr_risco.alignment = Alignment(horizontal="center")
+        if attribution_por_risco is not None:
+            cel_attr_risco.font = Font(name=fonte_padrao, size=10)
+
+        for col in range(1, 9):
             ws.cell(row=linha, column=col).fill = PatternFill(
                 start_color=zebra, end_color=zebra, fill_type="solid"
             )
@@ -204,6 +246,11 @@ def _montar_aba_covariancia(
     * peso(i) * peso(j) — ou seja, o valor "real" (não normalizado
     entre -1 e 1) de cada par de fundos, já ponderado pelo peso de cada
     um no portfólio.
+
+    Logo abaixo da matriz, adiciona uma linha "Risco Atribuído" com o
+    percentual de contribuição de cada fundo para o risco total do
+    portfólio (soma da coluna do fundo / soma total da matriz, via
+    fórmula SUM do Excel).
     """
     if not fundos or not covariancia:
         return
@@ -247,6 +294,38 @@ def _montar_aba_covariancia(
                 cel.value = "—"
             cel.alignment = Alignment(horizontal="center")
             cel.font = Font(name=fonte_padrao, size=9)
+
+    ultima_linha_dados = primeira_linha_dados + len(cnpjs) - 1
+    ultima_coluna = coluna_inicial + len(cnpjs) - 1
+
+    # ---- Risk Attribution: soma da coluna de cada fundo dividida pela
+    # soma total da matriz. Usa fórmulas do Excel (SUM), assim continua
+    # correta se o usuário editar algum valor da matriz depois. ----
+    if len(cnpjs) >= 2:
+        linha_risco = ultima_linha_dados + 2
+
+        cel_titulo = ws.cell(row=linha_risco, column=1, value="Risco Atribuído")
+        cel_titulo.font = Font(name=fonte_padrao, size=10, bold=True, color=COR_HEADER_TEXTO)
+        cel_titulo.fill = PatternFill(start_color=COR_NEON, end_color=COR_NEON, fill_type="solid")
+        cel_titulo.alignment = Alignment(horizontal="right", vertical="center")
+
+        intervalo_matriz = (
+            f"{get_column_letter(coluna_inicial)}{primeira_linha_dados}:"
+            f"{get_column_letter(ultima_coluna)}{ultima_linha_dados}"
+        )
+
+        for col_idx in range(len(cnpjs)):
+            letra_coluna = get_column_letter(coluna_inicial + col_idx)
+            intervalo_coluna = f"{letra_coluna}{primeira_linha_dados}:{letra_coluna}{ultima_linha_dados}"
+
+            cel = ws.cell(
+                row=linha_risco,
+                column=coluna_inicial + col_idx,
+                value=f"=SUM({intervalo_coluna})/SUM({intervalo_matriz})",
+            )
+            cel.number_format = "0.00%"
+            cel.font = Font(name=fonte_padrao, size=10, bold=True, color=COR_NEON)
+            cel.alignment = Alignment(horizontal="center")
 
     ws.freeze_panes = ws.cell(row=primeira_linha_dados, column=coluna_inicial).coordinate
     _autofit_colunas(ws, largura_min=10, largura_max=22)
