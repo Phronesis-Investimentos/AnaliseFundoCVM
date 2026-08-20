@@ -57,7 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (val > 0) return `<span class="text-[#00ff88] font-semibold">+${val.toFixed(2)}%</span>`;
         if (val < 0) return `<span class="text-[#ff3366] font-semibold">${val.toFixed(2)}%</span>`;
-        return `<span class="text-gray-400">0.00%</span>`;
+        return `<span class="text-gray-500 dark:text-gray-400">0.00%</span>`;
     };
 
     // Formata "YYYY-MM-DD" (valor do <input type="date">) para "dd/mm/aaaa"
@@ -79,21 +79,33 @@ document.addEventListener("DOMContentLoaded", () => {
         return `<span class="vol-badge vol-badge-${faixa}"><span class="vol-dot"></span>${vol.toFixed(2)}%</span>`;
     };
 
-    // Cor de fundo da célula de correlação (verde-neon -> transparente -> vermelho)
+    // Cor de fundo da célula de correlação (verde-neon -> transparente -> vermelho).
+    // Sensível ao tema: no claro usa texto escuro sobre os tons pastel,
+    // no escuro mantém o visual original (texto quase branco).
     const corCelulaCorrelacao = (valor) => {
+        const modoClaro = !document.documentElement.classList.contains('dark');
+
         if (valor === null || valor === undefined || isNaN(valor)) {
-            return 'background: rgba(255,255,255,0.02); color: #6b7280;';
+            return modoClaro
+                ? 'background: rgba(0,0,0,0.03); color: #6b7280;'
+                : 'background: rgba(255,255,255,0.02); color: #6b7280;';
         }
         if (valor >= 0.999) {
             // Diagonal principal (fundo com ele mesmo)
-            return 'background: rgba(255,255,255,0.06); color: #9ca3af;';
+            return modoClaro
+                ? 'background: rgba(0,0,0,0.05); color: #4b5563;'
+                : 'background: rgba(255,255,255,0.06); color: #9ca3af;';
         }
         if (valor >= 0) {
             const alpha = 0.06 + valor * 0.32;
-            return `background: rgba(0, 255, 136, ${alpha.toFixed(2)}); color: #eafff2;`;
+            return modoClaro
+                ? `background: rgba(0, 200, 110, ${alpha.toFixed(2)}); color: #065f32;`
+                : `background: rgba(0, 255, 136, ${alpha.toFixed(2)}); color: #eafff2;`;
         }
         const alpha = 0.06 + Math.abs(valor) * 0.32;
-        return `background: rgba(255, 51, 102, ${alpha.toFixed(2)}); color: #ffe9ee;`;
+        return modoClaro
+            ? `background: rgba(220, 38, 38, ${alpha.toFixed(2)}); color: #7f1d1d;`
+            : `background: rgba(255, 51, 102, ${alpha.toFixed(2)}); color: #ffe9ee;`;
     };
 
     // ==========================================
@@ -108,6 +120,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnGerarPortfolio = document.getElementById('btn_gerar_portfolio');
     const inputDataReferencia = document.getElementById('portfolio_data_referencia');
 
+    // ---- Carteiras salvas ----
+    const btnVerCarteiras = document.getElementById('btn_ver_carteiras');
+    const btnAdicionarCarteira = document.getElementById('btn_adicionar_carteira');
+    const popoverAdicionarCarteira = document.getElementById('popover_adicionar_carteira');
+    const inputNomeCarteira = document.getElementById('input_nome_carteira');
+    const btnConfirmarCarteira = document.getElementById('btn_confirmar_carteira');
+    const modalVerCarteiras = document.getElementById('modal_ver_carteiras');
+    const listaCarteirasModal = document.getElementById('lista_carteiras_modal');
+    const carteirasModalVazio = document.getElementById('carteiras_modal_vazio');
+    const btnFecharModalCarteiras = document.getElementById('btn_fechar_modal_carteiras');
+
     // Data de referência padrão: mês atual
     inputDataReferencia.value = new Date().toISOString().slice(0, 10);
 
@@ -120,10 +143,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         items.forEach((item, index) => {
             const li = document.createElement('li');
-            li.className = 'px-4 py-3 cursor-pointer hover:bg-white/5 border-b border-white/5 last:border-0 text-sm staggered-item transition-colors';
+            li.className = 'px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 last:border-0 text-sm staggered-item transition-colors';
             li.style.animationDelay = `${index * 0.05}s`;
             li.innerHTML = `
-                <div class="text-gray-200 truncate">${item.DENOM_SOCIAL}</div>
+                <div class="text-gray-800 dark:text-gray-200 truncate">${item.DENOM_SOCIAL}</div>
                 <div class="text-[11px] text-gray-500 mt-0.5">${item.CNPJ_FUNDO}</div>
             `;
 
@@ -150,7 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
             chip.className = 'flex items-center gap-2 bg-neon/10 border border-neon/20 text-neon px-3 py-1 rounded-full text-xs animate-fade-in-up';
             chip.innerHTML = `
                 <span class="truncate max-w-[220px]">${fundo.nome}</span>
-                <i class="ph ph-x cursor-pointer hover:text-white transition-colors" data-idx="${idx}"></i>
+                <i class="ph ph-x cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" data-idx="${idx}"></i>
             `;
             chip.querySelector('i').addEventListener('click', () => {
                 fundosPortfolio.splice(idx, 1);
@@ -160,6 +183,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         btnGerarPortfolio.disabled = fundosPortfolio.length === 0;
+        btnAdicionarCarteira.disabled = fundosPortfolio.length === 0;
     };
 
     const fetchBuscaFundos = debounce(async (termo) => {
@@ -181,6 +205,206 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener('click', (e) => {
         if (!inputBusca.contains(e.target)) listaBusca.classList.add('hidden');
     });
+
+    // ==========================================
+    // 3B. CARTEIRAS SALVAS (popover "Adicionar" + modal "Ver Carteiras")
+    // ==========================================
+
+    // ---- Popover "Adicionar Carteira" ----
+
+    function abrirPopoverCarteira() {
+        popoverAdicionarCarteira.classList.remove('hidden');
+        inputNomeCarteira.value = '';
+        inputNomeCarteira.focus();
+    }
+
+    function fecharPopoverCarteira() {
+        popoverAdicionarCarteira.classList.add('hidden');
+    }
+
+    btnAdicionarCarteira.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (popoverAdicionarCarteira.classList.contains('hidden')) {
+            abrirPopoverCarteira();
+        } else {
+            fecharPopoverCarteira();
+        }
+    });
+
+    // Clicar fora fecha o popover (mesmo padrão do dropdown de busca)
+    document.addEventListener('click', (e) => {
+        if (!popoverAdicionarCarteira.contains(e.target) && e.target !== btnAdicionarCarteira) {
+            fecharPopoverCarteira();
+        }
+    });
+
+    // Enter no campo de nome também confirma
+    inputNomeCarteira.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            btnConfirmarCarteira.click();
+        } else if (e.key === 'Escape') {
+            fecharPopoverCarteira();
+        }
+    });
+
+    btnConfirmarCarteira.addEventListener('click', async () => {
+        const nome = inputNomeCarteira.value.trim();
+        if (!nome) {
+            inputNomeCarteira.focus();
+            return;
+        }
+        if (fundosPortfolio.length === 0) return;
+
+        try {
+            const res = await fetch('/api/carteiras', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nome,
+                    fundos: fundosPortfolio.map(f => f.cnpj),
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.erro || 'Não foi possível salvar a carteira.');
+
+            // Salvou -> fecha a caixinha sozinha
+            fecharPopoverCarteira();
+        } catch (erro) {
+            console.error(erro);
+            alert(erro.message || 'Erro ao salvar a carteira.');
+        }
+    });
+
+    // ---- Modal "Ver Carteiras" ----
+
+    function abrirModalCarteiras() {
+        modalVerCarteiras.classList.remove('hidden');
+        carregarListaCarteirasNoModal();
+    }
+
+    function fecharModalCarteiras() {
+        modalVerCarteiras.classList.add('hidden');
+    }
+
+    btnVerCarteiras.addEventListener('click', abrirModalCarteiras);
+    btnFecharModalCarteiras.addEventListener('click', fecharModalCarteiras);
+
+    // Clicar no backdrop (fora da caixa) fecha o modal
+    modalVerCarteiras.addEventListener('click', (e) => {
+        if (e.target === modalVerCarteiras) fecharModalCarteiras();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modalVerCarteiras.classList.contains('hidden')) {
+            fecharModalCarteiras();
+        }
+    });
+
+    async function carregarListaCarteirasNoModal() {
+        listaCarteirasModal.innerHTML = '';
+        carteirasModalVazio.classList.add('hidden');
+        try {
+            const res = await fetch('/api/carteiras');
+            const carteiras = await res.json();
+            renderizarListaCarteirasNoModal(carteiras);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function renderizarListaCarteirasNoModal(carteiras) {
+        listaCarteirasModal.innerHTML = '';
+
+        if (!carteiras || carteiras.length === 0) {
+            carteirasModalVazio.classList.remove('hidden');
+            return;
+        }
+        carteirasModalVazio.classList.add('hidden');
+
+        carteiras.forEach(carteira => {
+            const linha = document.createElement('div');
+            linha.className = 'flex items-center justify-between gap-3 bg-surface hover:bg-surfaceHover border border-gray-200 dark:border-white/10 hover:border-neon/30 rounded-xl px-4 py-3 cursor-pointer transition-all group';
+            linha.innerHTML = `
+                <div class="flex items-center gap-3 min-w-0">
+                    <i class="ph ph-bookmark-simple-fill text-neon text-lg flex-shrink-0"></i>
+                    <div class="min-w-0">
+                        <div class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">${carteira.nome}</div>
+                        <div class="text-[11px] text-gray-500">${carteira.quantidade_fundos} fundo(s)</div>
+                    </div>
+                </div>
+                <i class="ph ph-trash text-gray-500 hover:text-[#ff3366] cursor-pointer transition-colors flex-shrink-0 p-1" data-excluir-carteira="${carteira.nome}"></i>
+            `;
+
+            // Clicar na linha (fora da lixeira) seleciona e carrega a carteira
+            linha.addEventListener('click', (e) => {
+                if (e.target.closest('[data-excluir-carteira]')) return;
+                fecharModalCarteiras();
+                carregarCarteira(carteira.nome);
+            });
+
+            linha.querySelector('[data-excluir-carteira]').addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!confirm(`Excluir a carteira "${carteira.nome}"?`)) return;
+                try {
+                    await fetch(`/api/carteiras/${encodeURIComponent(carteira.nome)}`, { method: 'DELETE' });
+                    carregarListaCarteirasNoModal();
+                } catch (erro) {
+                    console.error(erro);
+                    alert('Erro ao excluir a carteira.');
+                }
+            });
+
+            listaCarteirasModal.appendChild(linha);
+        });
+    }
+
+    // ---- Carregar uma carteira (usada ao clicar numa linha do modal) ----
+
+    async function carregarCarteira(nome) {
+        showLoader();
+        try {
+            const res = await fetch(`/api/carteiras/${encodeURIComponent(nome)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.erro || 'Carteira não encontrada.');
+
+            // Busca os dados (nome do fundo) de cada CNPJ salvo, já que a
+            // carteira só guarda os CNPJs. Usa /api/fundos/buscar com o
+            // próprio CNPJ como termo.
+            const fundosEncontrados = [];
+            for (const cnpj of data.cnpjs) {
+                try {
+                    const resBusca = await fetch(`/api/fundos/buscar?busca=${encodeURIComponent(cnpj)}`);
+                    const encontrados = await resBusca.json();
+                    const match = encontrados.find(f => f.CNPJ_FUNDO === cnpj) || encontrados[0];
+                    if (match) {
+                        fundosEncontrados.push({ cnpj: match.CNPJ_FUNDO, nome: match.DENOM_SOCIAL });
+                    }
+                } catch (e) {
+                    console.error(`Erro ao buscar dados do fundo ${cnpj}:`, e);
+                }
+            }
+
+            if (fundosEncontrados.length === 0) {
+                throw new Error('Nenhum dos fundos salvos nessa carteira foi encontrado.');
+            }
+
+            fundosPortfolio = fundosEncontrados;
+            renderChipsFundos();
+
+            // Gera o portfólio direto, com a data de hoje (informações
+            // mais recentes), igual clicar em "Gerar Portfólio".
+            const cnpjs = fundosPortfolio.map(f => f.cnpj);
+            const resultado = await chamarApiPortfolio(cnpjs, inputDataReferencia.value);
+            ultimoResultado = resultado;
+            renderizarPortfolio(resultado);
+        } catch (erro) {
+            console.error(erro);
+            alert(erro.message || 'Erro ao carregar a carteira.');
+        } finally {
+            hideLoader();
+        }
+    }
 
     // ==========================================
     // 4. GERAÇÃO DO PORTFÓLIO (tabela + pesos + correlação)
@@ -412,17 +636,26 @@ document.addEventListener("DOMContentLoaded", () => {
     // Cor de fundo da célula de covariância (mesma lógica da correlação,
     // mas a escala vai de -1 a 1 no teor "cru" da fórmula — na prática os
     // valores costumam ficar bem menores, então a intensidade da cor é
-    // proporcional ao valor absoluto)
+    // proporcional ao valor absoluto). Sensível ao tema, igual
+    // corCelulaCorrelacao.
     const corCelulaCovariancia = (valor) => {
+        const modoClaro = !document.documentElement.classList.contains('dark');
+
         if (valor === null || valor === undefined || isNaN(valor)) {
-            return 'background: rgba(255,255,255,0.02); color: #6b7280;';
+            return modoClaro
+                ? 'background: rgba(0,0,0,0.03); color: #6b7280;'
+                : 'background: rgba(255,255,255,0.02); color: #6b7280;';
         }
         if (valor >= 0) {
             const alpha = Math.min(0.06 + valor * 2, 0.85);
-            return `background: rgba(0, 255, 136, ${alpha.toFixed(2)}); color: #eafff2;`;
+            return modoClaro
+                ? `background: rgba(0, 200, 110, ${alpha.toFixed(2)}); color: #065f32;`
+                : `background: rgba(0, 255, 136, ${alpha.toFixed(2)}); color: #eafff2;`;
         }
         const alpha = Math.min(0.06 + Math.abs(valor) * 2, 0.85);
-        return `background: rgba(255, 51, 102, ${alpha.toFixed(2)}); color: #ffe9ee;`;
+        return modoClaro
+            ? `background: rgba(220, 38, 38, ${alpha.toFixed(2)}); color: #7f1d1d;`
+            : `background: rgba(255, 51, 102, ${alpha.toFixed(2)}); color: #ffe9ee;`;
     };
 
     function renderizarMatrizCovariancia() {
@@ -446,7 +679,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const thead = document.createElement('thead');
         const trHead = document.createElement('tr');
         trHead.innerHTML = `<th class="p-2"></th>` + cnpjs.map(cnpj =>
-            `<th class="p-2 font-medium text-gray-400 text-[10px] max-w-[90px]" title="${mapaNomes[cnpj]}">${nomeCurto(mapaNomes[cnpj])}</th>`
+            `<th class="p-2 font-medium text-gray-500 dark:text-gray-400 text-[10px] max-w-[90px]" title="${mapaNomes[cnpj]}">${nomeCurto(mapaNomes[cnpj])}</th>`
         ).join('');
         thead.appendChild(trHead);
         tabelaCovariancia.appendChild(thead);
@@ -455,7 +688,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const tbody = document.createElement('tbody');
         cnpjs.forEach(cnpjLinha => {
             const tr = document.createElement('tr');
-            let linhaHtml = `<th class="p-2 font-medium text-gray-400 text-[10px] text-right max-w-[110px] truncate" title="${mapaNomes[cnpjLinha]}">${nomeCurto(mapaNomes[cnpjLinha])}</th>`;
+            let linhaHtml = `<th class="p-2 font-medium text-gray-500 dark:text-gray-400 text-[10px] text-right max-w-[110px] truncate" title="${mapaNomes[cnpjLinha]}">${nomeCurto(mapaNomes[cnpjLinha])}</th>`;
 
             cnpjs.forEach(cnpjColuna => {
                 const valor = covariancia?.[cnpjColuna]?.[cnpjLinha];
@@ -473,11 +706,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const riscoAtribuido = calcularRiskAttribution(covariancia);
         const tfoot = document.createElement('tfoot');
         const trFoot = document.createElement('tr');
-        let footHtml = `<th class="p-2 pt-4 font-semibold text-white text-[10px] text-right border-t border-white/10">Risco Atribuído</th>`;
+        let footHtml = `<th class="p-2 pt-4 font-semibold text-gray-900 dark:text-white text-[10px] text-right border-t border-gray-200 dark:border-white/10">Risco Atribuído</th>`;
         cnpjs.forEach(cnpj => {
             const valor = riscoAtribuido[cnpj];
             const texto = (valor === null || valor === undefined || isNaN(valor)) ? '—' : `${valor.toFixed(2)}%`;
-            footHtml += `<td class="p-2 pt-4 font-semibold text-neon border-t border-white/10">${texto}</td>`;
+            footHtml += `<td class="p-2 pt-4 font-semibold text-neon border-t border-gray-200 dark:border-white/10">${texto}</td>`;
         });
         trFoot.innerHTML = footHtml;
         tfoot.appendChild(trFoot);
@@ -590,7 +823,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         fundosComDados.forEach((fundo, idx) => {
             const linha = document.createElement('tr');
-            linha.className = 'border-b border-white/5 hover:bg-white/[0.02] result-fade-in';
+            linha.className = 'border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/[0.02] result-fade-in';
 
             // Última linha recebe o ajuste de arredondamento para fechar 100%
             const valorPeso = idx === fundosComDados.length - 1
@@ -598,8 +831,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 : pesoIgual.toFixed(2);
 
             linha.innerHTML = `
-                <td class="px-4 py-4 text-xs text-gray-400">${fundo.cnpj}</td>
-                <td class="px-4 py-4 text-gray-200">
+                <td class="px-4 py-4 text-xs text-gray-500 dark:text-gray-400">${fundo.cnpj}</td>
+                <td class="px-4 py-4 text-gray-800 dark:text-gray-200">
                     <div class="truncate max-w-[260px] text-sm font-medium" title="${fundo.nome}">${fundo.nome}</div>
                 </td>
                 <td class="px-4 py-4 text-right">${formatValue(fundo.rentabilidade_36m)}</td>
@@ -609,7 +842,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <input type="number" min="0" max="100" step="0.01"
                                data-peso-cnpj="${fundo.cnpj}"
                                value="${valorPeso}"
-                               class="w-20 bg-black/50 border border-white/10 rounded-lg py-1.5 pl-2 pr-6 text-center text-sm focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all">
+                               class="w-20 bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg py-1.5 pl-2 pr-6 text-center text-sm focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all">
                         <span class="absolute right-2 text-xs text-gray-500 pointer-events-none">%</span>
                     </div>
                 </td>
@@ -652,7 +885,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const thead = document.createElement('thead');
         const trHead = document.createElement('tr');
         trHead.innerHTML = `<th class="p-2"></th>` + cnpjs.map(cnpj =>
-            `<th class="p-2 font-medium text-gray-400 text-[10px] max-w-[90px]" title="${mapaNomes[cnpj]}">${nomeCurto(mapaNomes[cnpj])}</th>`
+            `<th class="p-2 font-medium text-gray-500 dark:text-gray-400 text-[10px] max-w-[90px]" title="${mapaNomes[cnpj]}">${nomeCurto(mapaNomes[cnpj])}</th>`
         ).join('');
         thead.appendChild(trHead);
         tabelaCorrelacao.appendChild(thead);
@@ -661,7 +894,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const tbody = document.createElement('tbody');
         cnpjs.forEach(cnpjLinha => {
             const tr = document.createElement('tr');
-            let linhaHtml = `<th class="p-2 font-medium text-gray-400 text-[10px] text-right max-w-[110px] truncate" title="${mapaNomes[cnpjLinha]}">${nomeCurto(mapaNomes[cnpjLinha])}</th>`;
+            let linhaHtml = `<th class="p-2 font-medium text-gray-500 dark:text-gray-400 text-[10px] text-right max-w-[110px] truncate" title="${mapaNomes[cnpjLinha]}">${nomeCurto(mapaNomes[cnpjLinha])}</th>`;
 
             cnpjs.forEach(cnpjColuna => {
                 const valor = correlacao?.[cnpjColuna]?.[cnpjLinha];
@@ -712,6 +945,20 @@ document.addEventListener("DOMContentLoaded", () => {
         } finally {
             hideLoader();
         }
+    });
+
+    // ==========================================
+    // 5. TEMA CLARO/ESCURO — redesenha as matrizes ao trocar de tema
+    // ==========================================
+    // As cores das células (correlação/covariância) são calculadas em
+    // JS, não via CSS — então não se ajustam sozinhas quando o tema
+    // muda. theme.js dispara esse evento assim que a classe "dark" é
+    // alternada; se já houver um portfólio na tela, redesenha as duas
+    // matrizes com as cores certas pro tema novo.
+    document.addEventListener('phronesis:tema-mudou', () => {
+        if (!ultimoResultado.fundos || ultimoResultado.fundos.length === 0) return;
+        renderizarMatrizCorrelacao(ultimoResultado.fundos, ultimoResultado.correlacao);
+        renderizarMatrizCovariancia();
     });
 
 });

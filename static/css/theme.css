@@ -1,0 +1,66 @@
+/**
+ * Overrides de tema claro/escuro.
+ *
+ * Carregado DEPOIS de style.css (ver <link> nos templates). style.css
+ * continua sendo a fonte da verdade pro visual "escuro" original
+ * (glass-panel, ícone do calendário etc.) — aqui só ajustamos o que
+ * precisa mudar no tema CLARO (padrão), usando `html:not(.dark)` pra
+ * ter especificidade maior que a regra original e garantir que o
+ * override realmente vença, sem precisar saber o conteúdo exato de
+ * style.css.
+ *
+ * Não tivemos acesso ao style.css original neste momento — se o
+ * resultado visual do glass-panel no tema claro não ficar bom, é só
+ * mandar esse arquivo que a gente ajusta os valores exatos (blur,
+ * opacidade, sombra) aqui.
+ */
+
+/* ---- Glassmorphism (painéis .glass-panel) ---- */
+html:not(.dark) .glass-panel {
+    background: rgba(255, 255, 255, 0.75);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* ---- Ícone nativo do <input type="date">: no tema escuro geralmente
+   se inverte a cor (filter: invert) pra ficar branco sobre fundo
+   escuro. No tema claro isso faria o ícone sumir (ficaria branco
+   sobre fundo branco) — então só invertemos quando .dark estiver
+   presente. ---- */
+html:not(.dark) .custom-calendar-icon::-webkit-calendar-picker-indicator {
+    filter: none;
+}
+html.dark .custom-calendar-icon::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+}
+
+/* ---- color-scheme: ajuda o navegador a desenhar controles nativos
+   (date picker, scrollbar, etc.) na cor certa automaticamente ---- */
+html:not(.dark) {
+    color-scheme: light;
+}
+html.dark {
+    color-scheme: dark;
+}
+
+/* ---- Scrollbar (WebKit) combinando com o tema ---- */
+html:not(.dark) ::-webkit-scrollbar-track {
+    background: #f3f4f6;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 8px;
+}
+html.dark ::-webkit-scrollbar-track {
+    background: #0a0a0a;
+}
+html.dark ::-webkit-scrollbar-thumb {
+    background: #2a2a2a;
+    border-radius: 8px;
+}
+
+/* ---- Transição suave ao trocar de tema, só nas propriedades de cor
+   (evita "piscar" duro na troca, sem animar layout) ---- */
+body, .glass-panel, header, section, button, input, table, td, th {
+    transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}

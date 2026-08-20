@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Phronesis | Comparação de Fundos CVM</title>
+
+    <!-- Evita "flash" do tema errado: aplica a classe "dark" ANTES do
+         Tailwind/CSS carregarem, lendo a preferência salva. Padrão =
+         claro, quando não há nada salvo ainda. -->
+    <script>
+        (function () {
+            var tema = localStorage.getItem('phronesis-theme');
+            if (tema === 'dark') {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
+
     <!-- Fontes Modernas -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,31 +46,37 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Overrides de tema claro/escuro pros componentes customizados
+         (glass-panel, glow de fundo etc.) definidos em style.css -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
 </head>
-<body class="bg-background text-white font-sans antialiased overflow-x-hidden relative min-h-screen">
+<body class="bg-white text-gray-900 dark:bg-background dark:text-white font-sans antialiased overflow-x-hidden relative min-h-screen">
 
     <!-- Efeitos de iluminação de fundo (GlowBackground) -->
-    <div class="fixed top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-neonDim blur-[120px] opacity-30 pointer-events-none pulse-slow"></div>
-    <div class="fixed bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-neonDim blur-[120px] opacity-20 pointer-events-none pulse-slower"></div>
+    <div class="fixed top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-neonDim blur-[120px] opacity-10 dark:opacity-30 pointer-events-none pulse-slow"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-neonDim blur-[120px] opacity-5 dark:opacity-20 pointer-events-none pulse-slower"></div>
 
     <div class="max-w-4xl mx-auto px-6 py-12 relative z-10">
 
         <header class="mb-16 text-center animate-fade-in-up relative">
-            <a href="{{ url_for('index') }}" class="absolute left-0 top-0 w-11 h-11 flex-shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all magnetic-btn">
+            <a href="{{ url_for('index') }}" class="absolute left-0 top-0 w-11 h-11 flex-shrink-0 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-all magnetic-btn">
                 <i class="ph ph-arrow-left text-xl"></i>
             </a>
-            <a href="{{ url_for('portfolio') }}" class="absolute right-0 top-0 flex items-center gap-2 bg-surface hover:bg-surfaceHover text-white px-4 py-2.5 rounded-xl transition-all border border-white/10 text-sm magnetic-btn">
-                <i class="ph ph-briefcase"></i>
-                <span class="hidden sm:inline">Ver Portfólio</span>
-            </a>
-            <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white to-neon">
+
+            <!-- Toggle de tema claro/escuro (antes ficava aqui o botão "Ver Portfólio", removido) -->
+            <button id="btn_toggle_tema" title="Alternar tema claro/escuro" class="absolute right-0 top-0 w-11 h-11 flex-shrink-0 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-all magnetic-btn">
+                <i class="ph ph-sun text-xl block dark:hidden"></i>
+                <i class="ph ph-moon text-xl hidden dark:block"></i>
+            </button>
+
+            <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-neon dark:from-white dark:to-neon">
                 Comparação de Fundos <span class="text-neon">CVM</span>
             </h1>
         </header>
 
         <!-- SEÇÃO: COMPARAÇÃO DE FUNDOS -->
         <section class="glass-panel p-8 rounded-3xl relative group tilt-card animate-fade-in-up">
-            <div class="absolute inset-0 rounded-3xl border border-white/5 group-hover:border-neon/30 transition-colors duration-500 pointer-events-none"></div>
+            <div class="absolute inset-0 rounded-3xl border border-gray-100 dark:border-white/5 group-hover:border-neon/30 transition-colors duration-500 pointer-events-none"></div>
 
             <div class="flex items-center gap-3 mb-8">
                 <div class="w-10 h-10 rounded-full bg-neon/10 flex items-center justify-center text-neon icon-scale-hover">
@@ -69,12 +88,12 @@
             <div class="space-y-6">
                 <!-- Adicionar Fundo -->
                 <div class="relative">
-                    <label class="block text-sm font-medium text-gray-400 mb-2">Adicionar Fundos</label>
+                    <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Adicionar Fundos</label>
                     <div class="relative">
                         <i class="ph ph-plus absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                        <input type="text" id="busca_fundo_comparacao" class="w-full bg-black/50 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all" placeholder="Buscar para comparar...">
+                        <input type="text" id="busca_fundo_comparacao" class="w-full bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-xl py-3 pl-12 pr-4 text-gray-900 dark:text-white focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all" placeholder="Buscar para comparar...">
                     </div>
-                    <ul id="lista_fundos_comparacao" class="absolute z-50 w-full mt-2 bg-[#121212] border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto hidden glass-panel"></ul>
+                    <ul id="lista_fundos_comparacao" class="absolute z-50 w-full mt-2 bg-white dark:bg-[#121212] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto hidden glass-panel"></ul>
                 </div>
 
                 <!-- Chips de Fundos Adicionados -->
@@ -82,15 +101,15 @@
                     <!-- Injetado via JS -->
                 </div>
 
-                <hr class="border-white/5 my-4">
+                <hr class="border-gray-100 dark:border-white/5 my-4">
 
                 <!-- Adicionar Períodos -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-2">Adicionar Períodos Customizados</label>
+                    <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Adicionar Períodos Customizados</label>
                     <div class="flex flex-col sm:flex-row gap-3">
-                        <input type="month" id="comp_data_ini" class="flex-1 bg-black/50 border border-white/10 rounded-xl py-2 px-3 text-white text-sm focus:outline-none focus:border-neon transition-all custom-calendar-icon">
-                        <input type="month" id="comp_data_fim" class="flex-1 bg-black/50 border border-white/10 rounded-xl py-2 px-3 text-white text-sm focus:outline-none focus:border-neon transition-all custom-calendar-icon">
-                        <button id="btn_add_periodo" class="bg-surface hover:bg-surfaceHover text-white px-4 py-2 rounded-xl transition-all border border-white/10 text-sm flex items-center justify-center magnetic-btn">
+                        <input type="month" id="comp_data_ini" class="flex-1 bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-xl py-2 px-3 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-neon transition-all custom-calendar-icon">
+                        <input type="month" id="comp_data_fim" class="flex-1 bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-xl py-2 px-3 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-neon transition-all custom-calendar-icon">
+                        <button id="btn_add_periodo" class="bg-surface hover:bg-surfaceHover text-gray-900 dark:text-white px-4 py-2 rounded-xl transition-all border border-gray-200 dark:border-white/10 text-sm flex items-center justify-center magnetic-btn">
                             <i class="ph ph-plus"></i>
                         </button>
                     </div>
@@ -98,7 +117,7 @@
 
                 <div class="mt-6">
                     <div class="flex items-center justify-between mb-3">
-                        <label class="text-sm font-medium text-gray-400">
+                        <label class="text-sm font-medium text-gray-600 dark:text-gray-400">
                             Períodos Padrão (Dias Úteis)
                         </label>
                         <span class="text-xs text-gray-500" id="data_referencia_label"></span>
@@ -115,15 +134,15 @@
                 </div>
 
                 <!-- Botão -->
-                <button id="btn_comparar" class="w-full py-4 mt-6 bg-white text-black font-semibold rounded-xl hover:bg-neon transition-all duration-300 magnetic-btn flex justify-center items-center gap-2">
+                <button id="btn_comparar" class="w-full py-4 mt-6 bg-gray-900 text-white dark:bg-white dark:text-black font-semibold rounded-xl hover:bg-neon hover:text-white transition-all duration-300 magnetic-btn flex justify-center items-center gap-2">
                     <i class="ph ph-magic-wand"></i>
                     <span>Gerar Comparativo</span>
                 </button>
 
-                <div class="pt-2 border-t border-white/5">
+                <div class="pt-2 border-t border-gray-100 dark:border-white/5">
                     <p class="text-xs text-gray-500 mb-3">Analisa todos os fundos elegíveis pelos períodos de 12 a 60 meses.</p>
 
-                    <button id="btn_abrir_filtros_ranking" class="w-full py-3 bg-neon/10 text-neon font-semibold rounded-xl hover:bg-neon hover:text-black transition-all duration-300 border border-neon/30 magnetic-btn flex justify-center items-center gap-2">
+                    <button id="btn_abrir_filtros_ranking" class="w-full py-3 bg-neon/10 text-neon font-semibold rounded-xl hover:bg-neon hover:text-white transition-all duration-300 border border-neon/30 magnetic-btn flex justify-center items-center gap-2">
                         <i class="ph ph-trophy text-lg"></i>
                         <span>Gerar Ranking</span>
                     </button>
@@ -138,10 +157,10 @@
     <!-- ========================================== -->
     <div id="modal_resultado" class="fixed inset-0 z-[90] hidden">
         <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
+        <div class="absolute inset-0 bg-black/60 dark:bg-black/85 backdrop-blur-md"></div>
 
         <!-- Glow decorativo -->
-        <div class="fixed top-[-10%] right-[-10%] w-[45vw] h-[45vw] rounded-full bg-neonDim blur-[130px] opacity-25 pointer-events-none"></div>
+        <div class="fixed top-[-10%] right-[-10%] w-[45vw] h-[45vw] rounded-full bg-neonDim blur-[130px] opacity-10 dark:opacity-25 pointer-events-none"></div>
 
         <!-- Conteúdo -->
         <div class="relative z-10 h-full flex flex-col max-w-[95vw] mx-auto px-4 sm:px-8 py-6 sm:py-10">
@@ -149,32 +168,32 @@
             <!-- Header do modal -->
             <div class="flex items-start justify-between mb-6 flex-shrink-0">
                 <div>
-                    <h2 id="modal_titulo" class="text-2xl sm:text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-neon">
+                    <h2 id="modal_titulo" class="text-2xl sm:text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-neon dark:from-white dark:to-neon">
                         Resultado da Comparação
                     </h2>
-                    <p class="text-gray-400 text-sm mt-1 font-light" id="modal_subtitulo">
+                    <p class="text-gray-600 dark:text-gray-400 text-sm mt-1 font-light" id="modal_subtitulo">
                         Rentabilidade e volatilidade por período
                     </p>
                 </div>
                 <div class="flex items-center gap-2 flex-shrink-0">
-                    <button id="btn_exportar_excel" class="hidden items-center gap-2 h-10 px-4 rounded-full bg-neon/10 hover:bg-neon hover:text-black border border-neon/30 text-neon text-sm font-medium transition-all magnetic-btn">
+                    <button id="btn_exportar_excel" class="hidden items-center gap-2 h-10 px-4 rounded-full bg-neon/10 hover:bg-neon hover:text-white border border-neon/30 text-neon text-sm font-medium transition-all magnetic-btn">
                         <i class="ph ph-file-xls text-lg"></i>
                         <span>Exportar Excel</span>
                     </button>
-                    <button id="btn_fechar_modal" class="w-10 h-10 flex-shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all magnetic-btn">
+                    <button id="btn_fechar_modal" class="w-10 h-10 flex-shrink-0 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-all magnetic-btn">
                         <i class="ph ph-x text-xl"></i>
                     </button>
                 </div>
             </div>
             <!-- Tabela (scrollável dentro do modal) -->
-            <div class="flex-1 overflow-auto rounded-2xl border border-white/10 bg-black/40 glass-panel p-1">
+            <div class="flex-1 overflow-auto rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/40 glass-panel p-1">
                 <table class="w-full text-left text-sm whitespace-nowrap">
-                    <thead class="bg-white/5 border-b border-white/10 sticky top-0 backdrop-blur-md">
+                    <thead class="bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 sticky top-0 backdrop-blur-md">
                         <tr id="tabela_comparacao_head">
                             <!-- JS -->
                         </tr>
                     </thead>
-                    <tbody id="tabela_comparacao_body" class="divide-y divide-white/5">
+                    <tbody id="tabela_comparacao_body" class="divide-y divide-gray-100 dark:divide-white/5">
                         <!-- JS -->
                     </tbody>
                 </table>
@@ -187,13 +206,13 @@
     <!-- ========================================== -->
     <div id="modal_filtros_ranking" class="fixed inset-0 z-[95] hidden flex items-center justify-center">
         <!-- Fundo escuro -->
-        <div class="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
+        <div class="absolute inset-0 bg-black/60 dark:bg-black/85 backdrop-blur-md"></div>
 
         <div class="relative z-10 h-full flex items-center justify-center p-6">
             <div class="glass-panel ranking-modal rounded-3xl p-8 w-full max-w-md">
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-xl font-semibold">Configurar Ranking</h3>
-                    <button id="btn_fechar_filtros_ranking" class="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all magnetic-btn">
+                    <button id="btn_fechar_filtros_ranking" class="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-all magnetic-btn">
                         <i class="ph ph-x"></i>
                     </button>
                 </div>
@@ -201,7 +220,7 @@
                 <div class="space-y-5">
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label for="filtro_ranking_quantidade" class="block text-xs font-medium text-gray-400 mb-1.5">
+                            <label for="filtro_ranking_quantidade" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
                                 Quantidade de Fundos
                             </label>
                             <input
@@ -209,16 +228,16 @@
                                 id="filtro_ranking_quantidade"
                                 min="1"
                                 value="50"
-                                class="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-3 text-white text-sm focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all"
+                                class="w-full bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-xl py-2.5 px-3 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all"
                             >
                         </div>
                         <div>
-                            <label for="filtro_ranking_categoria" class="block text-xs font-medium text-gray-400 mb-1.5">
+                            <label for="filtro_ranking_categoria" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
                                 Categoria
                             </label>
                             <select
                                 id="filtro_ranking_categoria"
-                                class="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-3 text-white text-sm focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all appearance-none"
+                                class="w-full bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-xl py-2.5 px-3 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon transition-all appearance-none"
                             >
                                 <option value="todos">Todos</option>
                                 <option value="acoes">Ações</option>
@@ -229,7 +248,7 @@
 
                     <div>
                         <div class="flex items-center justify-between mb-2">
-                            <label class="text-xs font-medium text-gray-400">
+                            <label class="text-xs font-medium text-gray-600 dark:text-gray-400">
                                 Peso de cada período (deve somar 100%)
                             </label>
                             <span id="filtro_ranking_soma" class="text-xs font-semibold text-neon">100%</span>
@@ -239,27 +258,27 @@
                             <div>
                                 <label class="block text-[10px] text-gray-500 mb-1 text-center">12m</label>
                                 <input type="number" min="0" max="100" step="1" value="10" data-periodo="12m"
-                                    class="peso-ranking-input w-full bg-black/50 border border-white/10 rounded-lg py-2 px-1 text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
+                                    class="peso-ranking-input w-full bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg py-2 px-1 text-gray-900 dark:text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
                             </div>
                             <div>
                                 <label class="block text-[10px] text-gray-500 mb-1 text-center">24m</label>
                                 <input type="number" min="0" max="100" step="1" value="15" data-periodo="24m"
-                                    class="peso-ranking-input w-full bg-black/50 border border-white/10 rounded-lg py-2 px-1 text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
+                                    class="peso-ranking-input w-full bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg py-2 px-1 text-gray-900 dark:text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
                             </div>
                             <div>
                                 <label class="block text-[10px] text-gray-500 mb-1 text-center">36m</label>
                                 <input type="number" min="0" max="100" step="1" value="50" data-periodo="36m"
-                                    class="peso-ranking-input w-full bg-black/50 border border-white/10 rounded-lg py-2 px-1 text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
+                                    class="peso-ranking-input w-full bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg py-2 px-1 text-gray-900 dark:text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
                             </div>
                             <div>
                                 <label class="block text-[10px] text-gray-500 mb-1 text-center">48m</label>
                                 <input type="number" min="0" max="100" step="1" value="15" data-periodo="48m"
-                                    class="peso-ranking-input w-full bg-black/50 border border-white/10 rounded-lg py-2 px-1 text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
+                                    class="peso-ranking-input w-full bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg py-2 px-1 text-gray-900 dark:text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
                             </div>
                             <div>
                                 <label class="block text-[10px] text-gray-500 mb-1 text-center">60m</label>
                                 <input type="number" min="0" max="100" step="1" value="10" data-periodo="60m"
-                                    class="peso-ranking-input w-full bg-black/50 border border-white/10 rounded-lg py-2 px-1 text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
+                                    class="peso-ranking-input w-full bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg py-2 px-1 text-gray-900 dark:text-white text-xs text-center focus:outline-none focus:border-neon transition-all">
                             </div>
                         </div>
 
@@ -268,7 +287,7 @@
                         </p>
                     </div>
 
-                    <button id="btn_confirmar_filtros_ranking" class="w-full py-3.5 bg-white text-black font-semibold rounded-xl hover:bg-neon transition-all duration-300 magnetic-btn flex justify-center items-center gap-2">
+                    <button id="btn_confirmar_filtros_ranking" class="w-full py-3.5 bg-gray-900 text-white dark:bg-white dark:text-black font-semibold rounded-xl hover:bg-neon hover:text-white transition-all duration-300 magnetic-btn flex justify-center items-center gap-2">
                         <i class="ph ph-check-circle"></i>
                         <span>OK, Gerar Ranking</span>
                     </button>
@@ -280,25 +299,25 @@
     <!-- MODAL DE PROGRESSO DA EXPORTAÇÃO            -->
     <!-- ========================================== -->
     <div id="modal_progresso_exportacao" class="fixed inset-0 z-[97] hidden items-center justify-center px-4">
-        <div class="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
+        <div class="absolute inset-0 bg-black/60 dark:bg-black/85 backdrop-blur-md"></div>
 
         <div class="relative z-10 glass-panel rounded-3xl p-8 w-full max-w-sm text-center">
             <div class="w-14 h-14 mx-auto mb-5 rounded-full bg-neon/10 flex items-center justify-center text-neon">
                 <i class="ph ph-file-xls text-2xl"></i>
             </div>
             <h3 class="text-lg font-semibold mb-1">Gerando planilha...</h3>
-            <p class="text-xs text-gray-400 mb-5" id="progresso_exportacao_texto">
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-5" id="progresso_exportacao_texto">
                 Calculando volatilidade dos fundos
             </p>
 
-            <div class="w-full h-2 bg-white/5 rounded-full overflow-hidden mb-2">
+            <div class="w-full h-2 bg-gray-100 dark:bg-white/5 rounded-full overflow-hidden mb-2">
                 <div id="progresso_exportacao_barra" class="h-full bg-neon transition-all duration-300" style="width: 0%"></div>
             </div>
             <p class="text-xs text-gray-500" id="progresso_exportacao_contagem">0 / 0 fundos</p>
         </div>
     </div>
     <!-- Loader Global Overlay -->
-    <div id="global_loader" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+    <div id="global_loader" class="fixed inset-0 bg-black/70 dark:bg-black/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
         <div class="relative w-16 h-16">
             <div class="absolute inset-0 border-4 border-neon/20 rounded-full"></div>
             <div class="absolute inset-0 border-4 border-neon border-t-transparent rounded-full animate-spin"></div>
@@ -306,6 +325,7 @@
         <p class="mt-4 text-neon font-medium tracking-widest animate-pulse">PROCESSANDO...</p>
     </div>
 
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>

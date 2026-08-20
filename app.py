@@ -15,6 +15,12 @@ from services.exportacao_service import (
 )
 from services.portfolio import portfolio as calcular_portfolio
 from services.exportacao_portfolio import gerar_excel_portfolio
+from services.carteira_service import (
+    salvar_carteira,
+    listar_carteiras,
+    obter_carteira,
+    excluir_carteira,
+)
 from utils.validacoes import (
     validar_dados_variacao,
     validar_dados_comparacao,
@@ -315,6 +321,57 @@ def gerar_portfolio():
         "correlacao": correlacao_json,
         "covariancia": covariancia_json,
     })
+
+
+@app.get("/api/carteiras")
+def listar_carteiras_salvas():
+    """Lista as carteiras salvas (nome, quantidade de fundos, última
+    atualização) — usado para montar a lista de "Minhas Carteiras" na
+    tela de Portfólio. Não retorna os CNPJs (ver /api/carteiras/<nome>
+    para isso)."""
+    return jsonify(listar_carteiras())
+
+
+@app.post("/api/carteiras")
+def salvar_carteira_route():
+    """Salva (ou sobrescreve, se já existir uma com o mesmo nome) uma
+    carteira: um nome escolhido pelo usuário apontando para a lista de
+    CNPJs selecionados na tela naquele momento.
+
+    Espera um JSON com:
+    { "nome": "Carteira XP", "fundos": ["<cnpj1>", "<cnpj2>", ...] }
+    """
+    dados = request.get_json(silent=True) or {}
+
+    try:
+        carteira = salvar_carteira(dados.get("nome", ""), dados.get("fundos") or [])
+    except ValueError as erro:
+        return jsonify({"erro": str(erro)}), 400
+
+    return jsonify(carteira)
+
+
+@app.get("/api/carteiras/<nome>")
+def obter_carteira_route(nome):
+    """Retorna os CNPJs salvos de uma carteira pelo nome exato. O
+    front-end usa isso pra popular os fundos selecionados e então chama
+    /api/portfolio/gerar sem `data_referencia` (usa hoje), trazendo
+    sempre as informações mais recentes daquela carteira."""
+    carteira = obter_carteira(nome)
+    if carteira is None:
+        return jsonify({"erro": "Carteira não encontrada"}), 404
+
+    return jsonify(carteira)
+
+
+@app.delete("/api/carteiras/<nome>")
+def excluir_carteira_route(nome):
+    """Remove uma carteira salva pelo nome exato."""
+    removida = excluir_carteira(nome)
+    if not removida:
+        return jsonify({"erro": "Carteira não encontrada"}), 404
+
+    return jsonify({"ok": True})
 
 
 @app.post("/api/portfolio/exportar")
