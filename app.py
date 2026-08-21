@@ -1,4 +1,5 @@
 import os
+import threading
 
 import pandas as pd
 from flask import Flask, render_template, request, jsonify, send_file
@@ -35,8 +36,21 @@ from utils.validacoes import (
 
 app = Flask(__name__)
 
-# Carrega uma vez quando o Flask inicia
-df_fundos = carregar_depara_fundos()
+# O servidor deve iniciar mesmo se o cadastro da CVM estiver lento ou fora do ar.
+# A lista é preenchida em segundo plano e cada requisição passa a usar o cadastro
+# assim que o carregamento terminar.
+df_fundos = pd.DataFrame(columns=["CNPJ_FUNDO", "DENOM_SOCIAL"])
+
+
+def _carregar_fundos_em_segundo_plano():
+    global df_fundos
+    cadastro = carregar_depara_fundos()
+    if not cadastro.empty:
+        df_fundos = cadastro
+        print(f"Cadastro de classes pronto: {len(df_fundos)} fundos.")
+
+
+threading.Thread(target=_carregar_fundos_em_segundo_plano, daemon=True).start()
 
 # Chaves dos 5 períodos usados no ranking (mesmas do fundos_service)
 CHAVES_PERIODOS_RANKING = ["12m", "24m", "36m", "48m", "60m"]

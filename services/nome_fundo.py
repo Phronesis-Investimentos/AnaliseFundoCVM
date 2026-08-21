@@ -1,4 +1,5 @@
 import io
+import os
 import zipfile
 
 import pandas as pd
@@ -10,6 +11,28 @@ from utils.formatadores import formatar_cnpj
 URL_REGISTRO_CLASSES = (
     "https://dados.cvm.gov.br/dados/FI/CAD/DADOS/registro_fundo_classe.zip"
 )
+CACHE_CADASTRO_CLASSES = os.path.join("cache", "cadastro_classes.parquet")
+COLUNAS_CADASTRO_CLASSES = [
+    "CNPJ_Classe",
+    "Denominacao_Social",
+    "Classificacao",
+    "CNPJ_FUNDO",
+    "DENOM_SOCIAL",
+]
+
+
+def _carregar_cache() -> pd.DataFrame | None:
+    """Retorna o último cadastro válido salvo localmente, se houver."""
+    if not os.path.exists(CACHE_CADASTRO_CLASSES):
+        return None
+    try:
+        cadastro = pd.read_parquet(CACHE_CADASTRO_CLASSES)
+        if set(COLUNAS_CADASTRO_CLASSES).issubset(cadastro.columns):
+            print("Cadastro de classes carregado do cache local.")
+            return cadastro[COLUNAS_CADASTRO_CLASSES]
+    except Exception as erro:
+        print(f"Não foi possível ler o cache do cadastro de classes: {erro}")
+    return None
 
 
 def carregar_depara_fundos() -> pd.DataFrame:
@@ -19,10 +42,22 @@ def carregar_depara_fundos() -> pd.DataFrame:
     usam ``CNPJ_FUNDO``. Por isso, o ID de registro faz o vínculo com
     ``registro_fundo.csv`` e fornece a chave técnica usada nas cotas.
     """
-    print("Carregando cadastro de classes de fundos...")
+    cache = _carregar_cache()
+    if cache is not None:
+        return cache
 
-    response = requests.get(URL_REGISTRO_CLASSES, timeout=(10, 300))
-    response.raise_for_status()
+    print("Carregando cadastro de classes de fundos...")
+    # Não herda proxies inválidos do ambiente (por exemplo, 127.0.0.1:9).
+    # A leitura tem prazo curto para não impedir a inicialização do site.
+    session = requests.Session()
+    session.trust_env = False
+    try:
+        response = session.get(URL_REGISTRO_CLASSES, timeout=(10, 45))
+        response.raise_for_status()
+    except requests.RequestException as erro:
+        print(f"Cadastro de classes indisponível: {erro}")
+        print("O site iniciará sem a lista de fundos até que o cadastro possa ser carregado.")
+        return pd.DataFrame(columns=COLUNAS_CADASTRO_CLASSES)
 
     with zipfile.ZipFile(io.BytesIO(response.content)) as zip_file:
         with zip_file.open("registro_classe.csv") as csv:
@@ -66,12 +101,10 @@ def carregar_depara_fundos() -> pd.DataFrame:
     df["CNPJ_FUNDO"] = df["CNPJ_Fundo"].map(formatar_cnpj)
     df["DENOM_SOCIAL"] = df["Denominacao_Social"]
 
-    return df[
-        [
-            "CNPJ_Classe",
-            "Denominacao_Social",
-            "Classificacao",
-            "CNPJ_FUNDO",
-            "DENOM_SOCIAL",
-        ]
-    ].reset_index(drop=True)
+    cadastro = df[COLUNAS_CADASTRO_CLASSES].reset_index(drop=True)
+    try:
+        os.makedirs(os.path.dirname(CACHE_CADASTRO_CLASSES), exist_ok=True)
+        cadastro.to_parquet(CACHE_CADASTRO_CLASSES, index=False)
+    except Exception as erro:
+        print(f"Não foi possível salvar o cache do cadastro de classes: {erro}")
+    return cadastro
