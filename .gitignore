@@ -1,7 +1,12 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
 .env
 .idea/
 .vscode/
 cache/elegiveis_*.parquet
+cache/*.parquet
+
+# Dados persistentes locais
+data/carteiras.json

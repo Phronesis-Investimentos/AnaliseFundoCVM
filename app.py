@@ -1,5 +1,8 @@
+import os
+
 import pandas as pd
 from flask import Flask, render_template, request, jsonify, send_file
+from waitress import serve
 
 from services.nome_fundo import carregar_depara_fundos
 from services.fundos_service import (
@@ -520,4 +523,4 @@ def download_exportacao_ranking_excel(job_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, threaded=True)
+    serve(app, host="0.0.0.0", port=int(os.environ.get("PORT", "6767")))
