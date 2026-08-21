@@ -105,9 +105,14 @@ document.addEventListener("DOMContentLoaded", () => {
             li.style.animationDelay = `${index * 0.05}s`;
             li.textContent = item.DENOM_SOCIAL;
 
-            li.addEventListener('click', () => {
-                onSelect(item);
-                listElement.classList.add('hidden');
+            li.addEventListener('click', async () => {
+                try {
+                    await onSelect(item);
+                    listElement.classList.add('hidden');
+                } catch (erro) {
+                    console.error(erro);
+                    alert(erro.message || 'Não foi possível adicionar o fundo.');
+                }
             });
             listElement.appendChild(li);
         });
@@ -118,12 +123,19 @@ document.addEventListener("DOMContentLoaded", () => {
         divFundos.innerHTML = '';
         fundosSelecionados.forEach((fundo, idx) => {
             const chip = document.createElement('div');
-            chip.className = 'flex items-center gap-2 bg-neon/10 border border-neon/20 text-neon px-3 py-1 rounded-full text-xs animate-fade-in-up';
+            chip.className = 'portfolio-fundo-card animate-fade-in-up';
             chip.innerHTML = `
-                <span class="truncate max-w-[200px]">${fundo.nome}</span>
-                <i class="ph ph-x cursor-pointer hover:text-white transition-colors" data-idx="${idx}"></i>
+                <div class="portfolio-fundo-identidade">
+                    <span class="portfolio-fundo-icone"><i class="ph ph-chart-line-up"></i></span>
+                    <span class="min-w-0"><strong title="${fundo.nome}">${fundo.nome}</strong><small>${fundo.cnpj}</small></span>
+                </div>
+                ${fundo.subclasses?.length > 1 ? `<label class="portfolio-subclasse-campo"><span>Subclasse</span><select data-subclasse-idx="${idx}"><option value="">Selecione</option>${fundo.subclasses.map(id => `<option value="${id}" ${fundo.id_subclasse === id ? 'selected' : ''}>${id}</option>`).join('')}</select></label>` : ''}
+                ${fundo.subclasses?.length === 1 ? `<span class="portfolio-subclasse-fixa">Subclasse <b>${fundo.id_subclasse}</b></span>` : ''}
+                <button type="button" class="portfolio-remover-fundo" title="Remover fundo" data-idx="${idx}"><i class="ph ph-x"></i></button>
             `;
-            chip.querySelector('i').addEventListener('click', () => {
+            const seletor = chip.querySelector('[data-subclasse-idx]');
+            if (seletor) seletor.addEventListener('change', () => { fundosSelecionados[idx].id_subclasse = seletor.value || null; });
+            chip.querySelector('[data-idx]').addEventListener('click', () => {
                 fundosSelecionados.splice(idx, 1);
                 renderFundosChips();
             });
@@ -139,9 +151,18 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const res = await fetch(`/api/fundos/buscar?busca=${encodeURIComponent(termo)}`);
             const data = await res.json();
-            renderDropdown(data, listaComp, (item) => {
+            renderDropdown(data, listaComp, async (item) => {
                 if(!fundosSelecionados.find(f => f.cnpj === item.CNPJ_FUNDO)) {
-                    fundosSelecionados.push({ cnpj: item.CNPJ_FUNDO, nome: item.DENOM_SOCIAL });
+                    const resSubclasses = await fetch(`/api/fundos/subclasses?cnpj=${encodeURIComponent(item.CNPJ_FUNDO)}`);
+                    const dadosSubclasses = await resSubclasses.json();
+                    if (!resSubclasses.ok) throw new Error(dadosSubclasses.erro || 'Não foi possível consultar as subclasses.');
+                    const subclasses = dadosSubclasses.subclasses || [];
+                    fundosSelecionados.push({
+                        cnpj: item.CNPJ_FUNDO,
+                        nome: item.DENOM_SOCIAL,
+                        subclasses,
+                        id_subclasse: subclasses.length === 1 ? subclasses[0] : null,
+                    });
                     renderFundosChips();
                 }
                 inputBuscaComp.value = '';
@@ -326,6 +347,10 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('btn_comparar').addEventListener('click', async () => {
         if(fundosSelecionados.length === 0 || periodosSelecionados.length === 0) {
             alert('Adicione pelo menos um fundo e um período.');
+            return;
+        }
+        if (fundosSelecionados.some(f => f.subclasses?.length > 1 && !f.id_subclasse)) {
+            alert('Selecione a subclasse dos fundos pendentes antes de comparar.');
             return;
         }
 

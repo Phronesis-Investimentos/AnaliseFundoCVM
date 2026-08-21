@@ -290,6 +290,7 @@ def processar_comparacao_fundos(
     for fundo in fundos:
         cnpj = fundo.get("cnpj")
         nome = fundo.get("nome", cnpj)
+        id_subclasse = fundo.get("id_subclasse")
 
         if not cnpj:
             continue
@@ -308,7 +309,8 @@ def processar_comparacao_fundos(
             df = carregar_historico_fundo(
                 cnpj_formatado,
                 data_inicial_geral,
-                data_final_geral
+                data_final_geral,
+                id_subclasse=id_subclasse,
             )
 
             for periodo in periodos_normais:
@@ -340,7 +342,8 @@ def processar_comparacao_fundos(
             df_completo = carregar_historico_fundo(
                 cnpj_formatado,
                 periodo["data_inicial"],  # "0000-01-01"
-                periodo["data_final"]
+                periodo["data_final"],
+                id_subclasse=id_subclasse,
             )
 
             if not df_completo.empty:
@@ -409,6 +412,7 @@ def processar_comparacao_fundos(
         resultado_fundos.append({
             "cnpj": cnpj_formatado,
             "nome": nome,
+            "id_subclasse": id_subclasse,
             "variacoes": variacoes
         })
         

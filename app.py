@@ -138,6 +138,16 @@ def comparar_fundos():
     valido, erro = validar_dados_comparacao(dados)
     if not valido:
         return jsonify({"erro": erro}), 400
+
+    for fundo in dados["fundos"]:
+        cnpj = str(fundo.get("cnpj", "")).strip()
+        id_subclasse = normalizar_id_subclasse(fundo.get("id_subclasse"))
+        disponiveis = listar_subclasses_fundo(cnpj)
+        if disponiveis and id_subclasse is None:
+            return jsonify({"erro": f"Selecione uma subclasse para o fundo {cnpj}"}), 400
+        if id_subclasse is not None and id_subclasse not in disponiveis:
+            return jsonify({"erro": f"Subclasse inválida para o fundo {cnpj}"}), 400
+        fundo["id_subclasse"] = id_subclasse
     
     # Processamento
     resultado = processar_comparacao_fundos(
