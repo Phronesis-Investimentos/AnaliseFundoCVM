@@ -25,16 +25,47 @@ Com o ambiente virtual preparado, qualquer uma destas opções inicia o Waitress
 
 O script pode ser executado a partir de qualquer diretório. Para outra porta, defina `PORT` antes de iniciar; sem essa variável, a porta é `6767`.
 
-## Agendador de Tarefas
+## Serviço do Windows via NSSM
 
-Crie uma tarefa **Ao iniciar o computador** e configure:
+O serviço é gerenciado pelo Windows, como o Hub Phronesis. Baixe o NSSM e deixe `nssm.exe` em um destes caminhos:
 
-1. Em **Ação**, use `powershell.exe`.
-2. Em argumentos, informe `-NoProfile -ExecutionPolicy Bypass -File "C:\caminho\do\projeto\start_production.ps1"`.
-3. Marque a execução mesmo sem usuário conectado, se aplicável à VM.
-4. Em **Configurações**, habilite **Reiniciar a tarefa se falhar**, por exemplo a cada 1 minuto, com algumas tentativas.
-5. Defina **Se a tarefa já estiver em execução** como **Não iniciar uma nova instância**.
+```text
+C:\nssm\nssm-2.24\win64\nssm.exe
+C:\nssm\nssm\nssm-2.24\win64\nssm.exe
+```
+
+Em um PowerShell **como Administrador**, na pasta do projeto:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\install_windows_service.ps1
+```
+
+O instalador configura inicialização automática no boot, reinício pelo NSSM, logs em `logs\` e Waitress em `0.0.0.0:6767`.
+
+Comandos de operação, também em PowerShell **como Administrador**:
+
+```powershell
+Get-Service AnaliseFundoCVM
+Stop-Service AnaliseFundoCVM
+Start-Service AnaliseFundoCVM
+Restart-Service AnaliseFundoCVM
+Get-Content .\logs\analise_fundo_cvm_stdout.log -Wait -Tail 50
+```
+
+Após atualizar o código:
+
+```powershell
+Stop-Service AnaliseFundoCVM
+git pull --ff-only origin main
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Start-Service AnaliseFundoCVM
+```
+
+Não use `git reset --hard` se houver alterações locais.
+
+## Acesso pela internet
 
 URL de acesso: `http://IP_DA_VM:6767`
 
-Se necessário, libere a porta TCP `6767` no firewall da VM e em qualquer firewall de rede aplicável.
+O Waitress escuta em todas as interfaces da VM. Além do serviço, libere a porta TCP `6767` no firewall do Windows e no firewall/NAT externo da rede ou provedor da VM, se necessário.
