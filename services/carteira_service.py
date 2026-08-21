@@ -54,7 +54,7 @@ def _salvar_arquivo(carteiras: dict) -> None:
         json.dump(carteiras, arquivo, ensure_ascii=False, indent=2)
 
 
-def salvar_carteira(nome: str, cnpjs: list[str]) -> dict:
+def salvar_carteira(nome: str, cnpjs: list[str | dict]) -> dict:
     """
     Cria (ou sobrescreve, se já existir uma carteira com esse nome) uma
     carteira salva com a lista de CNPJs informada.
@@ -87,10 +87,18 @@ def salvar_carteira(nome: str, cnpjs: list[str]) -> dict:
 
     cnpjs_normalizados = []
     vistos = set()
-    for cnpj in cnpjs or []:
-        cnpj = str(cnpj).strip()
+    fundos = []
+    for item in cnpjs or []:
+        if isinstance(item, dict):
+            cnpj = str(item.get("cnpj", "")).strip()
+            id_subclasse = item.get("id_subclasse")
+            id_subclasse = str(id_subclasse).strip() if id_subclasse is not None and str(id_subclasse).strip() else None
+        else:
+            cnpj = str(item).strip()
+            id_subclasse = None
         if cnpj and cnpj not in vistos:
             cnpjs_normalizados.append(cnpj)
+            fundos.append({"cnpj": cnpj, "id_subclasse": id_subclasse})
             vistos.add(cnpj)
 
     if not cnpjs_normalizados:
@@ -101,6 +109,7 @@ def salvar_carteira(nome: str, cnpjs: list[str]) -> dict:
         carteiras[nome] = {
             "nome": nome,
             "cnpjs": cnpjs_normalizados,
+            "fundos": fundos,
             "atualizado_em": datetime.now().isoformat(timespec="seconds"),
         }
         _salvar_arquivo(carteiras)

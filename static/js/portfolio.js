@@ -150,12 +150,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div class="text-[11px] text-gray-500 mt-0.5">${item.CNPJ_FUNDO}</div>
             `;
 
-            li.addEventListener('click', () => {
+            li.addEventListener('click', async () => {
                 if (!fundosPortfolio.find(f => f.cnpj === item.CNPJ_FUNDO)) {
-                    fundosPortfolio.push({
-                        cnpj: item.CNPJ_FUNDO,
-                        nome: item.DENOM_SOCIAL,
-                    });
+                    try {
+                        const res = await fetch(`/api/fundos/subclasses?cnpj=${encodeURIComponent(item.CNPJ_FUNDO)}`);
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.erro || 'Não foi possível consultar as subclasses.');
+                        const subclasses = data.subclasses || [];
+                        fundosPortfolio.push({
+                            cnpj: item.CNPJ_FUNDO,
+                            nome: item.DENOM_SOCIAL,
+                            subclasses,
+                            // Uma única subclasse não cria etapa adicional.
+                            id_subclasse: subclasses.length === 1 ? subclasses[0] : null,
+                        });
+                    } catch (erro) {
+                        console.error(erro);
+                        alert(erro.message || 'Erro ao adicionar o fundo.');
+                        return;
+                    }
                     renderChipsFundos();
                 }
                 inputBusca.value = '';
@@ -173,8 +186,21 @@ document.addEventListener("DOMContentLoaded", () => {
             chip.className = 'flex items-center gap-2 bg-neon/10 border border-neon/20 text-neon px-3 py-1 rounded-full text-xs animate-fade-in-up';
             chip.innerHTML = `
                 <span class="truncate max-w-[220px]">${fundo.nome}</span>
+                ${fundo.subclasses && fundo.subclasses.length > 1 ? `
+                    <select data-subclasse-idx="${idx}" class="bg-transparent border border-neon/30 rounded px-1 py-0.5 text-[11px] focus:outline-none">
+                        <option value="">Subclasse...</option>
+                        ${fundo.subclasses.map(id => `<option value="${id}" ${fundo.id_subclasse === id ? 'selected' : ''}>${id}</option>`).join('')}
+                    </select>` : ''}
+                ${fundo.subclasses && fundo.subclasses.length === 1 ? `<span class="text-[10px] opacity-75">Subclasse ${fundo.id_subclasse}</span>` : ''}
                 <i class="ph ph-x cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" data-idx="${idx}"></i>
             `;
+            const seletor = chip.querySelector('[data-subclasse-idx]');
+            if (seletor) {
+                seletor.addEventListener('change', () => {
+                    fundosPortfolio[idx].id_subclasse = seletor.value || null;
+                    atualizarEstadoGerarPortfolio();
+                });
+            }
             chip.querySelector('i').addEventListener('click', () => {
                 fundosPortfolio.splice(idx, 1);
                 renderChipsFundos();
@@ -182,8 +208,13 @@ document.addEventListener("DOMContentLoaded", () => {
             divFundosAdicionados.appendChild(chip);
         });
 
-        btnGerarPortfolio.disabled = fundosPortfolio.length === 0;
+        atualizarEstadoGerarPortfolio();
         btnAdicionarCarteira.disabled = fundosPortfolio.length === 0;
+    };
+
+    const atualizarEstadoGerarPortfolio = () => {
+        btnGerarPortfolio.disabled = fundosPortfolio.length === 0
+            || fundosPortfolio.some(f => f.subclasses && f.subclasses.length > 1 && !f.id_subclasse);
     };
 
     const fetchBuscaFundos = debounce(async (termo) => {
@@ -262,7 +293,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     nome,
-                    fundos: fundosPortfolio.map(f => f.cnpj),
+                    fundos: fundosPortfolio.map(({ cnpj, id_subclasse }) => ({ cnpj, id_subclasse })),
                 }),
             });
             const data = await res.json();
@@ -372,13 +403,26 @@ document.addEventListener("DOMContentLoaded", () => {
             // carteira só guarda os CNPJs. Usa /api/fundos/buscar com o
             // próprio CNPJ como termo.
             const fundosEncontrados = [];
-            for (const cnpj of data.cnpjs) {
+            for (const salvo of (data.fundos || data.cnpjs || [])) {
+                const cnpj = typeof salvo === 'string' ? salvo : salvo.cnpj;
                 try {
                     const resBusca = await fetch(`/api/fundos/buscar?busca=${encodeURIComponent(cnpj)}`);
                     const encontrados = await resBusca.json();
-                    const match = encontrados.find(f => f.CNPJ_FUNDO === cnpj) || encontrados[0];
-                    if (match) {
-                        fundosEncontrados.push({ cnpj: match.CNPJ_FUNDO, nome: match.DENOM_SOCIAL });
+                    // Fundos de carteiras antigas podem ter saído do cadastro
+                    // atual; ainda assim o CNPJ deve seguir para o histórico.
+                    const match = encontrados.find(f => f.CNPJ_FUNDO === cnpj) || encontrados[0]
+                        || { CNPJ_FUNDO: cnpj, DENOM_SOCIAL: cnpj };
+                    if (match.CNPJ_FUNDO) {
+                        const resSubclasses = await fetch(`/api/fundos/subclasses?cnpj=${encodeURIComponent(match.CNPJ_FUNDO)}`);
+                        const dadosSubclasses = await resSubclasses.json();
+                        const subclasses = dadosSubclasses.subclasses || [];
+                        const idSalvo = typeof salvo === 'object' ? salvo.id_subclasse : null;
+                        fundosEncontrados.push({
+                            cnpj: match.CNPJ_FUNDO,
+                            nome: match.DENOM_SOCIAL,
+                            subclasses,
+                            id_subclasse: subclasses.includes(idSalvo) ? idSalvo : (subclasses.length === 1 ? subclasses[0] : null),
+                        });
                     }
                 } catch (e) {
                     console.error(`Erro ao buscar dados do fundo ${cnpj}:`, e);
@@ -394,8 +438,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Gera o portfólio direto, com a data de hoje (informações
             // mais recentes), igual clicar em "Gerar Portfólio".
-            const cnpjs = fundosPortfolio.map(f => f.cnpj);
-            const resultado = await chamarApiPortfolio(cnpjs, inputDataReferencia.value);
+            const resultado = await chamarApiPortfolio(fundosPortfolio, inputDataReferencia.value);
             ultimoResultado = resultado;
             renderizarPortfolio(resultado);
         } catch (erro) {
@@ -428,11 +471,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // precisar chamar a API de novo.
     let ultimoResultado = { fundos: [], correlacao: {} };
 
-    async function chamarApiPortfolio(cnpjs, dataReferencia) {
+    async function chamarApiPortfolio(fundos, dataReferencia) {
         const res = await fetch('/api/portfolio/gerar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fundos: cnpjs, data_referencia: dataReferencia }),
+            body: JSON.stringify({
+                fundos: fundos.map(({ cnpj, id_subclasse }) => ({ cnpj, id_subclasse })),
+                data_referencia: dataReferencia,
+            }),
         });
 
         const data = await res.json();
@@ -935,8 +981,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         showLoader();
         try {
-            const cnpjs = fundosPortfolio.map(f => f.cnpj);
-            const resultado = await chamarApiPortfolio(cnpjs, inputDataReferencia.value);
+            const resultado = await chamarApiPortfolio(fundosPortfolio, inputDataReferencia.value);
             ultimoResultado = resultado;
             renderizarPortfolio(resultado);
         } catch (erro) {

@@ -9,6 +9,26 @@ URL_BASE = "https://dados.cvm.gov.br/dados/FI/DOC/INF_DIARIO/DADOS"
 URL_BASE_HIST = f"{URL_BASE}/HIST"
 session = requests.Session()
 
+COLUNAS_HISTORICO = ["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA", "ID_SUBCLASSE"]
+
+
+def normalizar_id_subclasse(valor) -> str | None:
+    """Normaliza o identificador sem convertê-lo para número/float."""
+    if valor is None or pd.isna(valor):
+        return None
+    valor = str(valor).strip()
+    return valor or None
+
+
+def filtrar_por_subclasse(df: pd.DataFrame, id_subclasse: str | None) -> pd.DataFrame:
+    """Aplica o filtro adicional somente quando uma subclasse foi escolhida."""
+    if id_subclasse is None or df.empty or "ID_SUBCLASSE" not in df.columns:
+        return df
+    id_subclasse = normalizar_id_subclasse(id_subclasse)
+    if id_subclasse is None:
+        return df
+    return df[df["ID_SUBCLASSE"].map(normalizar_id_subclasse) == id_subclasse].copy()
+
 
 def _caminho_cache_mes(ano: int, mes: int) -> str:
     """Retorna o caminho do arquivo de cache para um mês específico"""
@@ -40,6 +60,12 @@ def _processar_csv(csv_file) -> pd.DataFrame:
     else:
         raise ValueError("Coluna de CNPJ não encontrada.")
     
+    colunas = [coluna_cnpj, "DT_COMPTC", "VL_QUOTA"]
+    # Arquivos antigos podem não possuir a coluna; nos novos, mantê-la é
+    # essencial para que a série de uma subclasse não seja agregada à outra.
+    if "ID_SUBCLASSE" in cabecalho.columns:
+        colunas.append("ID_SUBCLASSE")
+
     csv_file.seek(0)
     
     # Lê em chunks para otimizar memória
@@ -47,7 +73,7 @@ def _processar_csv(csv_file) -> pd.DataFrame:
         csv_file,
         sep=";",
         encoding="latin1",
-        usecols=[coluna_cnpj, "DT_COMPTC", "VL_QUOTA"],
+        usecols=colunas,
         chunksize=100000,
         parse_dates=["DT_COMPTC"]
     )
@@ -63,6 +89,8 @@ def _processar_csv(csv_file) -> pd.DataFrame:
         del chunk
     
     df = pd.concat(partes, ignore_index=True)
+    if "ID_SUBCLASSE" not in df.columns:
+        df["ID_SUBCLASSE"] = None
     
     return df
 
@@ -90,7 +118,11 @@ def carregar_dataframe_mes_completo(ano: int, mes: int) -> pd.DataFrame:
     caminho_cache = _caminho_cache_mes(ano, mes)
     if os.path.exists(caminho_cache):
         print(f"Lendo do cache: {ano}-{mes:02d}")
-        return pd.read_parquet(caminho_cache)
+        df_cache = pd.read_parquet(caminho_cache)
+        # Caches criados antes deste ajuste não têm ID_SUBCLASSE e não podem
+        # ser usados em cálculos que precisem separar subclasses.
+        if "ID_SUBCLASSE" in df_cache.columns:
+            return df_cache
 
     if ano <= 2020:
         # A função histórica também materializa o cache mensal.
@@ -99,9 +131,15 @@ def carregar_dataframe_mes_completo(ano: int, mes: int) -> pd.DataFrame:
         _carregar_dados_recentes(ano, mes, cnpj="")
 
     if os.path.exists(caminho_cache):
-        return pd.read_parquet(caminho_cache)
+        df_atualizado = pd.read_parquet(caminho_cache)
+        if "ID_SUBCLASSE" in df_atualizado.columns:
+            return df_atualizado
+        # Falha de rede não pode fazer o sistema voltar a usar uma série
+        # legada e potencialmente agregada. Um cache sem a coluna só volta a
+        # ser aceito após ser refeito pelo leitor atual.
+        print(f"Cache legado não pôde ser atualizado: {ano}-{mes:02d}")
 
-    return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+    return pd.DataFrame(columns=COLUNAS_HISTORICO)
 
 
 def carregar_fundos_elegiveis_por_cotistas(
@@ -207,7 +245,13 @@ def _carregar_dados_historicos(ano: int, mes: int, cnpj: str) -> pd.DataFrame:
     if os.path.exists(caminho_cache_ano):
         print(f"Lendo do cache anual: {ano}")
         df_ano = pd.read_parquet(caminho_cache_ano)
+        # Cache legado não tem a chave de subclasse; baixa novamente para
+        # não fabricar uma série agregada a partir de dados incompletos.
+        usar_cache = "ID_SUBCLASSE" in df_ano.columns
     else:
+        usar_cache = False
+
+    if not usar_cache:
         arquivo = f"inf_diario_fi_{ano}.zip"
         url = f"{URL_BASE_HIST}/{arquivo}"
         
@@ -286,62 +330,355 @@ def calcular_variacao_periodo(df: pd.DataFrame) -> float:
     return ((cota_final / cota_inicial) - 1) * 100
 
 
-def carregar_historico_fundo(
-    cnpj: str,
+def carregar_historico_fundos(
+    cnpjs,
     data_inicial: str,
-    data_final: str
+    data_final: str,
+    minimo_cotistas: int = 10,
 ) -> pd.DataFrame:
     """
-    Carrega o histórico completo de um fundo entre duas datas.
-    Esta é a função principal que o fundos_service.py está tentando importar.
+    Carrega em lote o histórico de vários fundos.
+
+    Antes de carregar o histórico, filtra os fundos para manter somente
+    aqueles que possuem >= minimo_cotistas cotistas no mês de referência
+    (mês de data_final).
+
+    Os arquivos mensais da CVM são lidos uma única vez e filtrados para os
+    CNPJs elegíveis.
+
+    Parâmetros
+    ----------
+    cnpjs : iterable
+        Lista/set de CNPJs dos fundos candidatos.
+
+    data_inicial : str
+        Data inicial do histórico.
+
+    data_final : str
+        Data final do histórico.
+
+    minimo_cotistas : int
+        Número mínimo de cotistas. Padrão = 10.
+
+    Retorno
+    -------
+    pd.DataFrame
+        Histórico somente dos fundos que possuem pelo menos
+        `minimo_cotistas` cotistas na data de referência.
     """
-    # Converte datas
+
+    # ============================================================
+    # 1. NORMALIZA OS CNPJs
+    # ============================================================
+
+    cnpjs = {
+        str(cnpj).strip()
+        for cnpj in cnpjs
+        if pd.notna(cnpj)
+    }
+
+    if not cnpjs:
+        return pd.DataFrame(
+            columns=[
+                "CNPJ_FUNDO",
+                "DT_COMPTC",
+                "VL_QUOTA"
+            ]
+        )
+
     inicio = pd.to_datetime(data_inicial)
     fim = pd.to_datetime(data_final)
-    
-    # Gera lista de meses necessários
+
+    # ============================================================
+    # 2. BUSCA OS FUNDOS ELEGÍVEIS
+    #
+    # Usa o mês da data_final como referência.
+    #
+    # Exemplo:
+    # data_final = 2026-08-20
+    # -> verifica os cotistas de agosto/2026
+    #
+    # ============================================================
+
+    print(
+        f"\n=== FILTRO DE COTISTAS ==="
+    )
+
+    print(
+        f"Data de referência: {fim:%d/%m/%Y}"
+    )
+
+    print(
+        f"Mínimo de cotistas: {minimo_cotistas}"
+    )
+
+    try:
+
+        elegiveis = carregar_fundos_elegiveis_por_cotistas(
+            ano=fim.year,
+            mes=fim.month,
+            minimo_cotistas=minimo_cotistas,
+        )
+
+    except Exception as erro:
+
+        print(
+            f"❌ Erro ao carregar fundos elegíveis: {erro}"
+        )
+
+        return pd.DataFrame(
+            columns=[
+                "CNPJ_FUNDO",
+                "DT_COMPTC",
+                "VL_QUOTA"
+            ]
+        )
+
+    if elegiveis.empty:
+
+        print(
+            "⚠️ Nenhum fundo elegível encontrado."
+        )
+
+        return pd.DataFrame(
+            columns=[
+                "CNPJ_FUNDO",
+                "DT_COMPTC",
+                "VL_QUOTA"
+            ]
+        )
+
+    # Normaliza CNPJs
+    elegiveis["CNPJ_FUNDO"] = (
+        elegiveis["CNPJ_FUNDO"]
+        .astype(str)
+        .str.strip()
+    )
+
+    # ============================================================
+    # 3. INTERSEÇÃO
+    #
+    # Mantém somente os fundos que:
+    #
+    # 1. Foram solicitados em `cnpjs`
+    # 2. Possuem >= 10 cotistas
+    #
+    # ============================================================
+
+    cnpjs_elegiveis = (
+        set(elegiveis["CNPJ_FUNDO"])
+        .intersection(cnpjs)
+    )
+
+    print(
+        f"Fundos solicitados: {len(cnpjs)}"
+    )
+
+    print(
+        f"Fundos com >= {minimo_cotistas} cotistas: "
+        f"{len(cnpjs_elegiveis)}"
+    )
+
+    fundos_excluidos = cnpjs - cnpjs_elegiveis
+
+    print(
+        f"Fundos excluídos por cotistas: "
+        f"{len(fundos_excluidos)}"
+    )
+
+    if not cnpjs_elegiveis:
+
+        print(
+            "⚠️ Nenhum dos fundos solicitados possui "
+            f"{minimo_cotistas} ou mais cotistas."
+        )
+
+        return pd.DataFrame(
+            columns=[
+                "CNPJ_FUNDO",
+                "DT_COMPTC",
+                "VL_QUOTA"
+            ]
+        )
+
+    # ============================================================
+    # 4. MOSTRA OS FUNDOS QUE SERÃO CARREGADOS
+    # ============================================================
+
+    print(
+        "\nFundos elegíveis:"
+    )
+
+    for cnpj in sorted(cnpjs_elegiveis):
+        print(f"  ✅ {cnpj}")
+
+    # A partir daqui NÃO usamos mais `cnpjs`.
+    #
+    # Isso é importante:
+    #
+    # antes:
+    #     df_mes["CNPJ_FUNDO"].isin(cnpjs)
+    #
+    # agora:
+    #     df_mes["CNPJ_FUNDO"].isin(cnpjs_elegiveis)
+    #
+    # Assim um fundo com menos de 10 cotistas nunca entra
+    # no histórico.
+
+    # ============================================================
+    # 5. GERA OS MESES NECESSÁRIOS
+    # ============================================================
+
     datas_mensais = pd.date_range(
         start=inicio.replace(day=1),
         end=fim.replace(day=1),
-        freq='MS'
+        freq="MS"
     )
-    
-    if len(datas_mensais) == 0:
-        datas_mensais = [inicio.replace(day=1)]
-    
-    # Coleta dados de cada mês
+
     partes = []
-    
+
+    # ============================================================
+    # 6. CARREGA OS DADOS
+    # ============================================================
+
     for data_mes in datas_mensais:
+
         ano = data_mes.year
         mes = data_mes.month
-        
+
         try:
-            df_mes = carregar_dataframe(ano, mes, cnpj)
-            
+
+            print(
+                f"Carregando cotas: "
+                f"{ano}-{mes:02d}"
+            )
+
+            df_mes = carregar_dataframe_mes_completo(
+                ano,
+                mes
+            )
+
+            if df_mes.empty:
+                continue
+
+            # Normaliza CNPJ
+            df_mes["CNPJ_FUNDO"] = (
+                df_mes["CNPJ_FUNDO"]
+                .astype(str)
+                .str.strip()
+            )
+
+            # ====================================================
+            # FILTRO PRINCIPAL
+            # ====================================================
+
+            df_mes = df_mes[
+                df_mes["CNPJ_FUNDO"].isin(
+                    cnpjs_elegiveis
+                )
+            ].copy()
+
             if not df_mes.empty:
                 partes.append(df_mes)
-                
-        except Exception as e:
-            print(f"Erro ao carregar {ano}-{mes:02d}: {str(e)}")
-            continue
-    
-    # Se não encontrou dados, retorna DataFrame vazio
-    if not partes:
-        return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
-    
-    # Concatena todos os meses
-    df_completo = pd.concat(partes, ignore_index=True)
-    
-    # Remove duplicatas
-    df_completo = df_completo.drop_duplicates(subset=["DT_COMPTC"])
-    
-    # Ordena por data
-    df_completo = df_completo.sort_values("DT_COMPTC")
-    
-    return df_completo
 
-def encontrar_primeira_cota(cnpj: str) -> pd.DataFrame:
+        except Exception as erro:
+
+            print(
+                f"Erro ao carregar "
+                f"{ano}-{mes:02d}: {erro}"
+            )
+
+    # ============================================================
+    # 7. NENHUM DADO
+    # ============================================================
+
+    if not partes:
+
+        return pd.DataFrame(
+            columns=[
+                "CNPJ_FUNDO",
+                "DT_COMPTC",
+                "VL_QUOTA"
+            ]
+        )
+
+    # ============================================================
+    # 8. CONCATENA
+    # ============================================================
+
+    df_final = pd.concat(
+        partes,
+        ignore_index=True
+    )
+
+    # ============================================================
+    # 9. LIMPEZA
+    # ============================================================
+
+    df_final["CNPJ_FUNDO"] = (
+        df_final["CNPJ_FUNDO"]
+        .astype(str)
+        .str.strip()
+    )
+
+    df_final["DT_COMPTC"] = pd.to_datetime(
+        df_final["DT_COMPTC"],
+        errors="coerce"
+    )
+
+    df_final["VL_QUOTA"] = pd.to_numeric(
+        df_final["VL_QUOTA"],
+        errors="coerce"
+    )
+
+    df_final = df_final.dropna(
+        subset=[
+            "CNPJ_FUNDO",
+            "DT_COMPTC",
+            "VL_QUOTA"
+        ]
+    )
+
+    # Remove duplicidades
+    df_final = (
+        df_final
+        .drop_duplicates(
+            subset=[
+                "CNPJ_FUNDO",
+                "DT_COMPTC"
+            ],
+            keep="last"
+        )
+        .sort_values(
+            [
+                "CNPJ_FUNDO",
+                "DT_COMPTC"
+            ]
+        )
+        .reset_index(drop=True)
+    )
+
+    # ============================================================
+    # 10. LOG FINAL
+    # ============================================================
+
+    print(
+        f"\n=== HISTÓRICO CARREGADO ==="
+    )
+
+    print(
+        f"Fundos elegíveis: "
+        f"{df_final['CNPJ_FUNDO'].nunique()}"
+    )
+
+    print(
+        f"Registros: "
+        f"{len(df_final):,}"
+    )
+
+    return df_final
+
+def encontrar_primeira_cota(cnpj: str, id_subclasse: str | None = None) -> pd.DataFrame:
     """
     Encontra a primeira cota disponível de um fundo,
     vasculhando os arquivos históricos desde 2001.
@@ -390,7 +727,7 @@ def encontrar_primeira_cota(cnpj: str) -> pd.DataFrame:
                         primeira_cota = df_ano.sort_values("DT_COMPTC").iloc[0]
                         print(f"  ✅ Primeira cota encontrada em {primeira_cota['DT_COMPTC'].strftime('%d/%m/%Y')}")
                         print(f"  Valor: R$ {primeira_cota['VL_QUOTA']:.6f}")
-                        return df_ano.sort_values("DT_COMPTC").head(1)
+                        return filtrar_por_subclasse(df_ano, id_subclasse).sort_values("DT_COMPTC").head(1)
         
         except Exception as e:
             print(f"  Erro no ano {ano}: {str(e)}")
@@ -409,7 +746,7 @@ def encontrar_primeira_cota(cnpj: str) -> pd.DataFrame:
                     primeira_cota = df_mes.sort_values("DT_COMPTC").iloc[0]
                     print(f"  ✅ Primeira cota encontrada em {primeira_cota['DT_COMPTC'].strftime('%d/%m/%Y')}")
                     print(f"  Valor: R$ {primeira_cota['VL_QUOTA']:.6f}")
-                    return df_mes.sort_values("DT_COMPTC").head(1)
+                    return filtrar_por_subclasse(df_mes, id_subclasse).sort_values("DT_COMPTC").head(1)
             
             except Exception as e:
                 print(f"  Erro em {ano}-{mes:02d}: {str(e)}")
@@ -448,18 +785,21 @@ def _processar_csv_filtrado(csv_file, cnpj: str) -> pd.DataFrame:
         
         if not chunk_filtrado.empty:
             chunk_filtrado.rename(columns={coluna_cnpj: "CNPJ_FUNDO"}, inplace=True)
-            chunks.append(chunk_filtrado[["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"]])
+            if "ID_SUBCLASSE" not in chunk_filtrado.columns:
+                chunk_filtrado["ID_SUBCLASSE"] = None
+            chunks.append(chunk_filtrado[COLUNAS_HISTORICO])
     
     if chunks:
         return pd.concat(chunks, ignore_index=True)
     
-    return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+    return pd.DataFrame(columns=COLUNAS_HISTORICO)
 
 
 def carregar_historico_fundo(
     cnpj: str,
     data_inicial: str,
-    data_final: str
+    data_final: str,
+    id_subclasse: str | None = None,
 ) -> pd.DataFrame:
     """
     Carrega o histórico completo de um fundo entre duas datas.
@@ -468,7 +808,7 @@ def carregar_historico_fundo(
     """
     # Verifica se é período "Desde o Início"
     if data_inicial == "0000-01-01":
-        return carregar_desde_inicio(cnpj, data_final)
+        return carregar_desde_inicio(cnpj, data_final, id_subclasse=id_subclasse)
     
     # Código existente para períodos normais...
     inicio = pd.to_datetime(data_inicial)
@@ -502,14 +842,14 @@ def carregar_historico_fundo(
     if not partes:
         return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
     
-    df_completo = pd.concat(partes, ignore_index=True)
+    df_completo = filtrar_por_subclasse(pd.concat(partes, ignore_index=True), id_subclasse)
     df_completo = df_completo.drop_duplicates(subset=["DT_COMPTC"])
     df_completo = df_completo.sort_values("DT_COMPTC")
     
     return df_completo
 
 
-def carregar_desde_inicio(cnpj: str, data_final: str) -> pd.DataFrame:
+def carregar_desde_inicio(cnpj: str, data_final: str, id_subclasse: str | None = None) -> pd.DataFrame:
     """
     Carrega todos os dados do fundo desde sua primeira cota até a data final.
     
@@ -520,7 +860,7 @@ def carregar_desde_inicio(cnpj: str, data_final: str) -> pd.DataFrame:
     print(f"\n=== CARREGANDO HISTÓRICO COMPLETO DO FUNDO {cnpj} ===")
     
     # Passo 1: Encontra a primeira cota
-    df_primeira = encontrar_primeira_cota(cnpj)
+    df_primeira = encontrar_primeira_cota(cnpj, id_subclasse=id_subclasse)
     
     if df_primeira.empty:
         print("❌ Nenhuma cota encontrada para este fundo")
@@ -571,7 +911,7 @@ def carregar_desde_inicio(cnpj: str, data_final: str) -> pd.DataFrame:
     if not partes:
         return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
     
-    df_completo = pd.concat(partes, ignore_index=True)
+    df_completo = filtrar_por_subclasse(pd.concat(partes, ignore_index=True), id_subclasse)
     df_completo = df_completo.drop_duplicates(subset=["DT_COMPTC"])
     df_completo = df_completo.sort_values("DT_COMPTC")
     
@@ -583,7 +923,8 @@ def carregar_desde_inicio(cnpj: str, data_final: str) -> pd.DataFrame:
 def carregar_historico_fundos(
     cnpjs,
     data_inicial: str,
-    data_final: str
+    data_final: str,
+    subclasses: dict[str, str | None] | None = None,
 ) -> pd.DataFrame:
     """Carrega em lote o histórico de vários fundos.
 
@@ -591,7 +932,7 @@ def carregar_historico_fundos(
     CNPJs solicitados. Para o ranking isso elimina a leitura repetida dos
     mesmos 60 arquivos para cada fundo.
     """
-    cnpjs = set(cnpjs)
+    cnpjs = {str(cnpj).strip() for cnpj in cnpjs}
     if not cnpjs:
         return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
 
@@ -616,12 +957,31 @@ def carregar_historico_fundos(
     if not partes:
         return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
 
+    df_final = pd.concat(partes, ignore_index=True)
+    if "ID_SUBCLASSE" not in df_final.columns:
+        df_final["ID_SUBCLASSE"] = None
+    if subclasses:
+        partes_filtradas = []
+        for cnpj, grupo in df_final.groupby("CNPJ_FUNDO", sort=False):
+            partes_filtradas.append(filtrar_por_subclasse(grupo, subclasses.get(str(cnpj).strip())))
+        df_final = pd.concat(partes_filtradas, ignore_index=True) if partes_filtradas else df_final.iloc[0:0]
+
     return (
-        pd.concat(partes, ignore_index=True)
+        df_final
         .drop_duplicates(subset=["CNPJ_FUNDO", "DT_COMPTC"])
         .sort_values(["CNPJ_FUNDO", "DT_COMPTC"])
         .reset_index(drop=True)
     )
+
+
+def listar_subclasses_fundo(cnpj: str, data_referencia: str | None = None) -> list[str]:
+    """Retorna IDs não vazios disponíveis para um fundo, sem alterar o fluxo legado."""
+    fim = pd.Timestamp(data_referencia).normalize() if data_referencia else pd.Timestamp.today().normalize()
+    inicio = fim - pd.DateOffset(months=2)
+    df = carregar_historico_fundo(cnpj, inicio.strftime("%Y-%m-%d"), fim.strftime("%Y-%m-%d"))
+    if df.empty or "ID_SUBCLASSE" not in df.columns:
+        return []
+    return sorted({valor for valor in df["ID_SUBCLASSE"].map(normalizar_id_subclasse) if valor is not None})
 
 
 def carregar_cotas_referencia_fundos(cnpjs, datas_referencia) -> pd.DataFrame:

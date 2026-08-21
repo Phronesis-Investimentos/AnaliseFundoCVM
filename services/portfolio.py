@@ -1,534 +1,275 @@
 import pandas as pd
 from services.volatilidade import calcular_volatilidade_periodo
-from services.cvm import carregar_historico_fundos
+from services.cvm import carregar_historico_fundos, carregar_desde_inicio, filtrar_por_subclasse
+
 
 def carregar_historico_36meses(
     fundos: pd.DataFrame,
     data_referencia: str | pd.Timestamp | None = None,
+    subclasses: dict[str, str | None] | None = None,
 ) -> pd.DataFrame:
-    """
-    Carrega os últimos 756 dias disponíveis de cada fundo, a partir de
-    uma data de referência.
-
-    Considera como referência a data informada (ou hoje, se não informada)
-    e retorna, para cada CNPJ, as 756 observações mais recentes
-    disponíveis até essa data.
-
-    Como o filtro é "<= data_referencia" e pegamos os últimos 756
-    registros já ordenados, se a data escolhida não for um dia útil
-    (fim de semana/feriado) ou o fundo simplesmente não tiver cota
-    naquele dia, o próprio filtro já cai automaticamente para a última
-    data disponível anterior — não precisa de tratamento extra aqui.
-
-    Parâmetros
-    ----------
-    fundos : pd.DataFrame
-        DataFrame contendo a coluna CNPJ_FUNDO.
-    data_referencia : str | pd.Timestamp | None
-        Data final da janela de 756 dias (formato "YYYY-MM-DD" se string).
-        Se None, usa a data de hoje.
-
-    Retorno
-    -------
-    pd.DataFrame
-        Histórico diário dos fundos, limitado às últimas 756 observações
-        de cada CNPJ_FUNDO até a data de referência.
-    """
-
+    colunas = ["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA", "ID_SUBCLASSE"]
     if fundos.empty:
-        return pd.DataFrame(
-            columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"]
-        )
+        return pd.DataFrame(columns=colunas)
 
-    # CNPJs únicos
-    cnpjs = (
-        fundos["CNPJ_FUNDO"]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .unique()
-    )
+    cnpjs = fundos["CNPJ_FUNDO"].dropna().astype(str).str.strip().unique().tolist()
+    if not cnpjs:
+        return pd.DataFrame(columns=colunas)
 
-    if len(cnpjs) == 0:
-        return pd.DataFrame(
-            columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"]
-        )
-
-    # Data final = data de referência escolhida pelo usuário (ou hoje)
-    data_final = (
-        pd.Timestamp(data_referencia).normalize()
-        if data_referencia
-        else pd.Timestamp.today().normalize()
-    )
-
-    # Aproximadamente 36 meses para trás.
-    # Carregamos uma margem maior para garantir 756 pregões.
+    data_final = pd.Timestamp(data_referencia).normalize() if data_referencia is not None else pd.Timestamp.today().normalize()
     data_inicial = data_final - pd.DateOffset(months=40)
 
-    print(
-        f"Carregando histórico de {data_inicial:%d/%m/%Y} "
-        f"até {data_final:%d/%m/%Y}"
-    )
+    print(f"Carregando histórico inicial de {data_inicial:%d/%m/%Y} até {data_final:%d/%m/%Y}")
     print(f"Fundos: {len(cnpjs)}")
 
-    # Usa a função em lote já existente no seu código.
     df = carregar_historico_fundos(
         cnpjs=cnpjs,
         data_inicial=data_inicial.strftime("%Y-%m-%d"),
-        data_final=data_final.strftime("%Y-%m-%d")
+        data_final=data_final.strftime("%Y-%m-%d"),
+        subclasses=subclasses,
     )
 
     if df.empty:
-        return pd.DataFrame(
-            columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"]
-        )
+        df = pd.DataFrame(columns=colunas)
+    else:
+        df = df.copy()
+        df["CNPJ_FUNDO"] = df["CNPJ_FUNDO"].astype(str).str.strip()
+        df["DT_COMPTC"] = pd.to_datetime(df["DT_COMPTC"], errors="coerce")
+        df["VL_QUOTA"] = pd.to_numeric(df["VL_QUOTA"], errors="coerce")
+        df = df.dropna(subset=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+        df = df[(df["DT_COMPTC"] <= data_final) & (df["VL_QUOTA"] > 0)].copy()
+        df = df.sort_values(["CNPJ_FUNDO", "DT_COMPTC"]).drop_duplicates(["CNPJ_FUNDO", "DT_COMPTC"], keep="last")
 
-    # Garantir tipos
-    df["CNPJ_FUNDO"] = df["CNPJ_FUNDO"].astype(str).str.strip()
-    df["DT_COMPTC"] = pd.to_datetime(df["DT_COMPTC"])
-
-    # Garantir que não estamos pegando datas depois da referência.
-    # Se a data escolhida não existir para um fundo (fim de semana,
-    # feriado, fundo novo, etc.), esse filtro já garante que ficamos
-    # só com o que existe até (e incluindo) a data de referência —
-    # ou seja, o dia útil anterior disponível entra automaticamente.
-    df = df[df["DT_COMPTC"] <= data_final]
-
-    # Ordena por fundo e data
-    df = df.sort_values(
-        ["CNPJ_FUNDO", "DT_COMPTC"]
-    )
-
-    # Pega exatamente os 756 últimos registros de cada fundo
-    df = (
-        df.groupby("CNPJ_FUNDO", group_keys=False)
-          .tail(756)
-          .sort_values(["CNPJ_FUNDO", "DT_COMPTC"])
-          .reset_index(drop=True)
-    )
-
-    print(f"Total de registros retornados: {len(df):,}")
-
-    # Quantidade por fundo para conferência
     quantidade = df.groupby("CNPJ_FUNDO").size()
+    fundos_incompletos = quantidade[quantidade < 756].index.tolist()
+    fundos_encontrados = set(quantidade.index)
+    fundos_incompletos += [c for c in cnpjs if c not in fundos_encontrados]
+    fundos_incompletos = list(dict.fromkeys(fundos_incompletos))
 
-    print(
-        f"Fundos com 756 registros: "
-        f"{(quantidade == 756).sum()}"
-    )
+    print(f"Fundos com 756 ou mais cotas: {(quantidade >= 756).sum()}")
+    print(f"Fundos com menos de 756 cotas: {len(fundos_incompletos)}")
 
-    print(
-        f"Fundos com menos de 756 registros: "
-        f"{(quantidade < 756).sum()}"
-    )
+    historicos_desde_inicio = []
+    for i, cnpj in enumerate(fundos_incompletos, 1):
+        print(f"\n[{i}/{len(fundos_incompletos)}] Buscando histórico completo: {cnpj}")
+        try:
+            df_inicio = carregar_desde_inicio(
+                cnpj=cnpj,
+                data_final=data_final.strftime("%Y-%m-%d"),
+                id_subclasse=(subclasses or {}).get(cnpj),
+            )
+            if df_inicio.empty:
+                print(f"  ⚠️ Nenhum histórico encontrado para {cnpj}")
+                continue
+
+            df_inicio = df_inicio.copy()
+            df_inicio["CNPJ_FUNDO"] = df_inicio["CNPJ_FUNDO"].astype(str).str.strip()
+            df_inicio["DT_COMPTC"] = pd.to_datetime(df_inicio["DT_COMPTC"], errors="coerce")
+            df_inicio["VL_QUOTA"] = pd.to_numeric(df_inicio["VL_QUOTA"], errors="coerce")
+            df_inicio = df_inicio.dropna(subset=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+            df_inicio = df_inicio[(df_inicio["DT_COMPTC"] <= data_final) & (df_inicio["VL_QUOTA"] > 0)].copy()
+            df_inicio = df_inicio.sort_values("DT_COMPTC").drop_duplicates(["CNPJ_FUNDO", "DT_COMPTC"], keep="last")
+
+            if not df_inicio.empty:
+                historicos_desde_inicio.append(df_inicio[colunas])
+                print(f"  ✅ {len(df_inicio)} cotas | {df_inicio['DT_COMPTC'].iloc[0]:%d/%m/%Y} até {df_inicio['DT_COMPTC'].iloc[-1]:%d/%m/%Y}")
+        except Exception as erro:
+            print(f"  ❌ Erro ao buscar início do fundo {cnpj}: {erro}")
+
+    if fundos_incompletos and not df.empty:
+        df = df[~df["CNPJ_FUNDO"].isin(fundos_incompletos)].copy()
+
+    if historicos_desde_inicio:
+        df = pd.concat([df, pd.concat(historicos_desde_inicio, ignore_index=True)], ignore_index=True)
+
+    if df.empty:
+        return pd.DataFrame(columns=colunas)
+
+    df = df.sort_values(["CNPJ_FUNDO", "DT_COMPTC"]).drop_duplicates(["CNPJ_FUNDO", "DT_COMPTC"], keep="last")
+
+    # Somente fundos antigos são cortados para 756. Fundos novos mantêm tudo.
+    partes = []
+    for cnpj, grupo in df.groupby("CNPJ_FUNDO", sort=False):
+        grupo = grupo.sort_values("DT_COMPTC")
+        partes.append(grupo.tail(756) if len(grupo) >= 756 else grupo)
+
+    df = pd.concat(partes, ignore_index=True).sort_values(["CNPJ_FUNDO", "DT_COMPTC"]).reset_index(drop=True)
+
+    quantidade_final = df.groupby("CNPJ_FUNDO").size()
+    print(f"\nTotal de registros retornados: {len(df):,}")
+    print(f"Fundos com 756 registros: {(quantidade_final == 756).sum()}")
+    print(f"Fundos com menos de 756 registros: {(quantidade_final < 756).sum()}")
+
+    if (quantidade_final < 756).any():
+        print("\nFundos com histórico menor que 756:")
+        for cnpj, qtd in quantidade_final[quantidade_final < 756].items():
+            grupo = df[df["CNPJ_FUNDO"] == cnpj].sort_values("DT_COMPTC")
+            print(f"  {cnpj}: {qtd} cotas | {grupo['DT_COMPTC'].iloc[0]:%d/%m/%Y} até {grupo['DT_COMPTC'].iloc[-1]:%d/%m/%Y}")
 
     return df
 
+
 def calcular_correlacao(base_cotas: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calcula a matriz de correlação entre os fundos utilizando
-    os retornos diários das cotas.
-
-    Parâmetros
-    ----------
-    base_cotas : pd.DataFrame
-        DataFrame contendo:
-        CNPJ_FUNDO, DT_COMPTC e VL_QUOTA.
-
-    Retorno
-    -------
-    pd.DataFrame
-        Matriz de correlação entre os fundos.
-    """
-
     if base_cotas.empty:
         return pd.DataFrame()
 
     df = base_cotas.copy()
+    df["CNPJ_FUNDO"] = df["CNPJ_FUNDO"].astype(str).str.strip()
+    df["DT_COMPTC"] = pd.to_datetime(df["DT_COMPTC"], errors="coerce")
+    df["VL_QUOTA"] = pd.to_numeric(df["VL_QUOTA"], errors="coerce")
+    df = df.dropna(subset=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
+    df = df[df["VL_QUOTA"] > 0]
+    df = df.sort_values(["CNPJ_FUNDO", "DT_COMPTC"]).drop_duplicates(["CNPJ_FUNDO", "DT_COMPTC"])
 
-    df["DT_COMPTC"] = pd.to_datetime(df["DT_COMPTC"])
+    # O primeiro dia de cada fundo não tem retorno. Na correlação, o pandas
+    # usa somente as datas em que os DOIS fundos possuem retorno.
+    df["RETORNO_DIARIO"] = df.groupby("CNPJ_FUNDO")["VL_QUOTA"].pct_change()
+    retornos = df.pivot(index="DT_COMPTC", columns="CNPJ_FUNDO", values="RETORNO_DIARIO")
+    return retornos.corr(method="pearson", min_periods=2)
 
-    # Ordena por fundo e data
-    df = df.sort_values(
-        ["CNPJ_FUNDO", "DT_COMPTC"]
-    )
 
-    # Calcula retorno diário de cada fundo
-    df["RETORNO_DIARIO"] = (
-        df.groupby("CNPJ_FUNDO")["VL_QUOTA"]
-          .pct_change()
-    )
-
-    # Transforma:
-    #
-    # DATA       FUNDO_A  FUNDO_B  FUNDO_C
-    # 01/01      ...      ...      ...
-    # 02/01      ...      ...      ...
-    #
-    retornos = df.pivot(
-        index="DT_COMPTC",
-        columns="CNPJ_FUNDO",
-        values="RETORNO_DIARIO"
-    )
-
-    # Correlação de Pearson
-    correlacao = retornos.corr()
-
-    return correlacao
-
-def calcular_covariancia(
-    base_cotas: pd.DataFrame,
-    volatilidades: dict[str, float],
-    pesos: dict[str, float] | None = None,
-) -> pd.DataFrame:
-    """
-    Calcula a matriz de covariância entre os fundos usando a fórmula
-    simples de covariância a partir da correlação:
-
-        cov(i, j) = correlacao(i, j) * vol(i) * vol(j) * peso(i) * peso(j)
-
-    A correlação usada aqui vem diretamente de `calcular_correlacao`
-    (mesma função usada para a aba/matriz de Correlação) — ou seja,
-    `calcular_covariancia` recebe a mesma entrada que `calcular_correlacao`
-    (`base_cotas`) e reaproveita ela por dentro, ao invés de receber uma
-    matriz de correlação já pronta de fora.
-
-    Ou seja, mesma estrutura/shape da matriz de correlação (CNPJ x
-    CNPJ), mas com o valor "real" (não normalizado entre -1 e 1): cada
-    célula já embute a volatilidade de cada fundo e o peso de cada um
-    no portfólio.
-
-    IMPORTANTE: como todos os termos da fórmula (correlação, volatilidade
-    e peso) são frações entre -1 e 1, `volatilidades` aqui já é
-    convertido de percentual (15.0 = 15%) para fração decimal (0.15)
-    antes de multiplicar — senão o resultado explode (ex.: 15 * 15 = 225
-    em vez de 0.15 * 0.15 = 0.0225). Com essa conversão, cada célula da
-    matriz também fica sempre <= 1 (mesmo teto da correlação), já que é
-    produto de frações <= 1.
-
-    Parâmetros
-    ----------
-    base_cotas : pd.DataFrame
-        DataFrame contendo CNPJ_FUNDO, DT_COMPTC e VL_QUOTA — mesma
-        entrada usada por `calcular_correlacao`. A correlação é
-        calculada aqui dentro chamando `calcular_correlacao(base_cotas)`.
-    volatilidades : dict[str, float]
-        CNPJ_FUNDO -> volatilidade anualizada em PERCENTUAL (mesma escala
-        de VOLATILIDADE, ex.: 15.0 = 15%). É convertida para fração
-        decimal internamente.
-    pesos : dict[str, float] | None
-        CNPJ_FUNDO -> peso (fração, ex.: 0.25 para 25%). Se None, ou se
-        um fundo não tiver peso informado, assume peso igual entre
-        todos os fundos da matriz de correlação (1 / quantidade de
-        fundos).
-
-    Retorno
-    -------
-    pd.DataFrame
-        Matriz de covariância, indexada e com colunas por CNPJ_FUNDO,
-        no mesmo shape da matriz de correlação.
-    """
-
+def calcular_covariancia(base_cotas: pd.DataFrame, volatilidades: dict[str, float], pesos: dict[str, float] | None = None) -> pd.DataFrame:
     correlacao = calcular_correlacao(base_cotas)
-
     if correlacao is None or correlacao.empty:
         return pd.DataFrame()
 
     cnpjs = list(correlacao.columns)
-
-    # Sem pesos informados: distribui igualmente entre os fundos
-    # (mesmo comportamento padrão usado na tela de Portfólio).
     if not pesos:
-        peso_igual = 1 / len(cnpjs) if cnpjs else 0
-        pesos = {cnpj: peso_igual for cnpj in cnpjs}
+        peso = 1 / len(cnpjs) if cnpjs else 0
+        pesos = {cnpj: peso for cnpj in cnpjs}
 
     covariancia = pd.DataFrame(index=cnpjs, columns=cnpjs, dtype=float)
-
-    for cnpj_i in cnpjs:
-        vol_i = volatilidades.get(cnpj_i)
-        peso_i = pesos.get(cnpj_i, 0.0)
-
-        for cnpj_j in cnpjs:
-            vol_j = volatilidades.get(cnpj_j)
-            peso_j = pesos.get(cnpj_j, 0.0)
-
-            corr_ij = correlacao.loc[cnpj_i, cnpj_j]
-
-            if vol_i is None or vol_j is None or pd.isna(corr_ij):
-                covariancia.loc[cnpj_i, cnpj_j] = None
+    for i in cnpjs:
+        vol_i = volatilidades.get(i)
+        peso_i = pesos.get(i, 0.0)
+        for j in cnpjs:
+            vol_j = volatilidades.get(j)
+            peso_j = pesos.get(j, 0.0)
+            corr = correlacao.loc[i, j]
+            if vol_i is None or vol_j is None or pd.isna(corr):
+                covariancia.loc[i, j] = None
                 continue
-
-            # Percentual -> fração decimal (15.0 -> 0.15)
-            vol_i_fracao = vol_i / 100
-            vol_j_fracao = vol_j / 100
-
-            covariancia.loc[cnpj_i, cnpj_j] = (
-                corr_ij * vol_i_fracao * vol_j_fracao * peso_i * peso_j
-            )
-
+            covariancia.loc[i, j] = corr * (vol_i / 100) * (vol_j / 100) * peso_i * peso_j
     return covariancia
 
 
 def calcular_risk_attribution(covariancia: pd.DataFrame) -> pd.Series:
-    """
-    Calcula o "Risk Attribution" (risco atribuído) de cada fundo dentro
-    do portfólio: para cada fundo, soma a coluna dele na matriz de
-    covariância e divide pela soma total de todas as células da matriz.
-
-        risco_atribuido(i) = soma_coluna(i) / soma_total(matriz)
-
-    O resultado vem em pontos percentuais (soma de todos os fundos =
-    100%, exceto arredondamento) — quanto maior, maior a contribuição
-    daquele fundo para o risco (covariância) total do portfólio.
-
-    Parâmetros
-    ----------
-    covariancia : pd.DataFrame
-        Matriz de covariância (ver `calcular_covariancia`), indexada e
-        com colunas por CNPJ_FUNDO.
-
-    Retorno
-    -------
-    pd.Series
-        Índice = CNPJ_FUNDO, valor = risco atribuído em percentual
-        (ex.: 35.0 = 35%). Série vazia se a matriz de covariância
-        estiver vazia ou se a soma total for zero.
-    """
-
     if covariancia is None or covariancia.empty:
         return pd.Series(dtype=float)
-
     soma_colunas = covariancia.sum(axis=0, skipna=True)
     soma_total = covariancia.to_numpy(dtype=float).sum()
-
     if soma_total == 0 or pd.isna(soma_total):
         return pd.Series(0.0, index=covariancia.columns)
-
     return (soma_colunas / soma_total) * 100
 
 
-def calcular_attribution(
-    resultado: pd.DataFrame,
-    pesos: dict[str, float] | None = None,
-) -> pd.Series:
-    """
-    Calcula o "Attribution" (atribuição de retorno) de cada fundo dentro
-    do portfólio: a rentabilidade de 36 meses do fundo multiplicada pelo
-    peso dele no portfólio.
-
-        attribution(i) = rentabilidade(i) * peso(i)
-
-    Ou seja, quanto cada fundo efetivamente contribuiu (em pontos
-    percentuais) para o retorno do portfólio como um todo.
-
-    Parâmetros
-    ----------
-    resultado : pd.DataFrame
-        DataFrame com CNPJ_FUNDO e RENTABILIDADE (ver `portfolio`).
-    pesos : dict[str, float] | None
-        CNPJ_FUNDO -> peso (fração, ex.: 0.25 para 25%). Se None, ou se
-        um fundo não tiver peso informado, assume peso igual entre
-        todos os fundos de `resultado`.
-
-    Retorno
-    -------
-    pd.Series
-        Índice = CNPJ_FUNDO, valor = attribution em pontos percentuais
-        (ex.: rentabilidade 12% * peso 50% = 6.0). Série vazia se
-        `resultado` estiver vazio.
-    """
-
+def calcular_attribution(resultado: pd.DataFrame, pesos: dict[str, float] | None = None) -> pd.Series:
     if resultado is None or resultado.empty:
         return pd.Series(dtype=float)
-
     cnpjs = resultado["CNPJ_FUNDO"].tolist()
-
-    # Sem pesos informados: distribui igualmente entre os fundos
-    # (mesmo comportamento padrão usado no restante do módulo).
     if not pesos:
-        peso_igual = 1 / len(cnpjs) if cnpjs else 0
-        pesos = {cnpj: peso_igual for cnpj in cnpjs}
-
+        peso = 1 / len(cnpjs) if cnpjs else 0
+        pesos = {cnpj: peso for cnpj in cnpjs}
     rentabilidades = resultado.set_index("CNPJ_FUNDO")["RENTABILIDADE"]
     pesos_series = pd.Series({cnpj: pesos.get(cnpj, 0.0) for cnpj in cnpjs})
-
     return rentabilidades * pesos_series
 
 
-def calcular_indice_attribution_risco(
-    attribution: pd.Series,
-    risco_atribuido: pd.Series,
-) -> pd.Series:
-    """
-    Divide o Attribution de cada fundo pelo módulo (valor absoluto) do
-    Risk Attribution do mesmo fundo:
-
-        indice(i) = attribution(i) / abs(risco_atribuido(i))
-
-    Serve como uma medida de "retorno entregue por unidade de risco
-    atribuído": quanto maior, mais retorno o fundo trouxe pra cada ponto
-    de risco que ele adicionou ao portfólio.
-
-    Parâmetros
-    ----------
-    attribution : pd.Series
-        Índice = CNPJ_FUNDO, valor = attribution (ver
-        `calcular_attribution`).
-    risco_atribuido : pd.Series
-        Índice = CNPJ_FUNDO, valor = risco atribuído em percentual (ver
-        `calcular_risk_attribution`).
-
-    Retorno
-    -------
-    pd.Series
-        Índice = CNPJ_FUNDO, valor = attribution / |risco_atribuido|.
-        Fica None para fundos cujo risco atribuído seja 0, ausente ou
-        que não existam em ambas as séries.
-    """
-
+def calcular_indice_attribution_risco(attribution: pd.Series, risco_atribuido: pd.Series) -> pd.Series:
     if attribution is None or attribution.empty or risco_atribuido is None or risco_atribuido.empty:
         return pd.Series(dtype=float)
-
     indice = pd.Series(index=attribution.index, dtype=float)
-
     for cnpj in attribution.index:
         risco = risco_atribuido.get(cnpj)
-
         if risco is None or pd.isna(risco) or risco == 0:
             indice.loc[cnpj] = None
-            continue
-
-        indice.loc[cnpj] = attribution.loc[cnpj] / abs(risco)
-
+        else:
+            indice.loc[cnpj] = attribution.loc[cnpj] / abs(risco)
     return indice
+
 
 def portfolio(
     fundos: pd.DataFrame,
     pesos: dict[str, float] | None = None,
     data_referencia: str | pd.Timestamp | None = None,
+    subclasses: dict[str, str | None] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Calcula rentabilidade, volatilidade, a matriz de correlação e a
-    matriz de covariância dos fundos informados, com base nos 756
-    pregões anteriores à `data_referencia` (ou hoje, se não informada).
+    fundos = fundos.copy()
+    fundos["CNPJ_FUNDO"] = fundos["CNPJ_FUNDO"].astype(str).str.strip()
 
-    Se a `data_referencia` cair em um dia não útil (fim de semana,
-    feriado) ou não existir cota do fundo naquele dia, o cálculo já
-    considera automaticamente a última data disponível anterior — ver
-    `carregar_historico_36meses`.
-
-    A matriz de covariância é calculada a partir da correlação entre os
-    fundos, multiplicada pela volatilidade e pelo peso de cada par de
-    fundos (ver `calcular_covariancia`). Sem `pesos` informado, assume
-    peso igual entre todos os fundos.
-
-    O `resultado_por_fundo` também traz a coluna RISCO_ATRIBUIDO: o
-    percentual de contribuição de cada fundo para o risco total do
-    portfólio (soma da coluna do fundo na matriz de covariância dividida
-    pela soma total da matriz — ver `calcular_risk_attribution`).
-
-    Retorno
-    -------
-    tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
-        (resultado_por_fundo, matriz_de_correlacao, matriz_de_covariancia)
-    """
-
-    base_cotas = carregar_historico_36meses(fundos, data_referencia=data_referencia)
-
-    # Correlação entre os fundos
+    base_cotas = carregar_historico_36meses(
+        fundos,
+        data_referencia=data_referencia,
+        subclasses=subclasses,
+    )
     correlacao = calcular_correlacao(base_cotas)
 
     print("\n=== MATRIZ DE CORRELAÇÃO ===")
     print(correlacao)
 
     if base_cotas.empty:
-        return (
-            pd.DataFrame(
-                columns=[
-                    "CNPJ_FUNDO",
-                    "RENTABILIDADE",
-                    "VOLATILIDADE"
-                ]
-            ),
-            correlacao,
-            pd.DataFrame(),
-        )
+        return (pd.DataFrame(columns=["CNPJ_FUNDO", "RENTABILIDADE", "VOLATILIDADE"]), correlacao, pd.DataFrame())
 
     resultados = []
-
     for cnpj in fundos["CNPJ_FUNDO"].dropna().unique():
-
-        # Histórico do fundo
-        df_fundo = base_cotas[
-            base_cotas["CNPJ_FUNDO"] == cnpj
-        ].copy()
-
+        df_fundo = base_cotas[base_cotas["CNPJ_FUNDO"] == cnpj].copy()
+        df_fundo = filtrar_por_subclasse(df_fundo, (subclasses or {}).get(cnpj))
         if df_fundo.empty:
             continue
 
-        # Ordena cronologicamente
-        df_fundo = df_fundo.sort_values("DT_COMPTC")
+        df_fundo["DT_COMPTC"] = pd.to_datetime(df_fundo["DT_COMPTC"], errors="coerce")
+        df_fundo["VL_QUOTA"] = pd.to_numeric(df_fundo["VL_QUOTA"], errors="coerce")
+        df_fundo = df_fundo.dropna(subset=["DT_COMPTC", "VL_QUOTA"])
+        df_fundo = df_fundo[df_fundo["VL_QUOTA"] > 0]
+        df_fundo = df_fundo.sort_values("DT_COMPTC").drop_duplicates("DT_COMPTC").reset_index(drop=True)
 
-        # Precisa ter pelo menos duas cotas
         if len(df_fundo) < 2:
             continue
 
-        # Primeira e última cota
+        # Para fundos antigos, base_cotas já contém somente as últimas 756 cotas.
+        # Para fundos novos, contém TODAS as cotas desde a primeira existência.
         cota_inicial = df_fundo.iloc[0]["VL_QUOTA"]
         cota_final = df_fundo.iloc[-1]["VL_QUOTA"]
+        rentabilidade = ((cota_final / cota_inicial) - 1) * 100
 
-        # Rentabilidade dos 756 dias
-        rentabilidade = (
-            (cota_final / cota_inicial) - 1
-        ) * 100
+        # A volatilidade usa exatamente o histórico disponível deste fundo.
+        volatilidade = calcular_volatilidade_periodo(df_fundo, anualizar=True, dias_uteis_ano=252)
 
-        # Volatilidade
-        volatilidade = calcular_volatilidade_periodo(df_fundo)
-
+        qtd = len(df_fundo)
         resultados.append({
             "CNPJ_FUNDO": cnpj,
             "RENTABILIDADE": rentabilidade,
             "VOLATILIDADE": volatilidade,
-            "QTD_DIAS": len(df_fundo),
+            "QTD_DIAS": qtd,
             "DATA_INICIAL": df_fundo["DT_COMPTC"].iloc[0],
             "DATA_FINAL": df_fundo["DT_COMPTC"].iloc[-1],
             "COTA_INICIAL": cota_inicial,
             "COTA_FINAL": cota_final,
         })
 
+        if qtd < 756:
+            print("\n=== FUNDO COM MENOS DE 756 COTAS ===")
+            print(f"CNPJ: {cnpj}")
+            print(f"Quantidade: {qtd}")
+            print(f"Data inicial: {df_fundo['DT_COMPTC'].iloc[0]:%d/%m/%Y}")
+            print(f"Data final: {df_fundo['DT_COMPTC'].iloc[-1]:%d/%m/%Y}")
+            print(f"Cota inicial: {cota_inicial:.8f}")
+            print(f"Cota final: {cota_final:.8f}")
+            print(f"Rentabilidade: {rentabilidade:.2f}%")
+            print(f"Volatilidade: {volatilidade:.2f}%")
+
     resultado = pd.DataFrame(resultados)
 
-    # Covariância = correlação x volatilidade x peso de cada par de
-    # fundos. Precisa da volatilidade por fundo (calculada acima), por
-    # isso só é calculada aqui, depois do loop.
-    volatilidades = (
-        resultado.set_index("CNPJ_FUNDO")["VOLATILIDADE"].to_dict()
-        if not resultado.empty
-        else {}
-    )
+    volatilidades = resultado.set_index("CNPJ_FUNDO")["VOLATILIDADE"].to_dict() if not resultado.empty else {}
     covariancia = calcular_covariancia(base_cotas, volatilidades, pesos)
 
-    # Risk attribution: soma da coluna de cada fundo na matriz de
-    # covariância, dividida pela soma total da matriz.
     risco_atribuido = calcular_risk_attribution(covariancia)
-    if not resultado.empty and not risco_atribuido.empty:
-        resultado["RISCO_ATRIBUIDO"] = resultado["CNPJ_FUNDO"].map(risco_atribuido)
-    elif not resultado.empty:
-        resultado["RISCO_ATRIBUIDO"] = None
+    resultado["RISCO_ATRIBUIDO"] = resultado["CNPJ_FUNDO"].map(risco_atribuido) if not resultado.empty else None
 
-    # Attribution: rentabilidade de 36 meses do fundo x peso do fundo.
     attribution = calcular_attribution(resultado, pesos)
-    if not resultado.empty and not attribution.empty:
-        resultado["ATTRIBUTION"] = resultado["CNPJ_FUNDO"].map(attribution)
-    elif not resultado.empty:
-        resultado["ATTRIBUTION"] = None
+    resultado["ATTRIBUTION"] = resultado["CNPJ_FUNDO"].map(attribution) if not resultado.empty else None
 
-    # Attribution / |Risk Attribution|: retorno entregue por unidade de
-    # risco atribuído.
-    indice_attribution_risco = calcular_indice_attribution_risco(attribution, risco_atribuido)
-    if not resultado.empty and not indice_attribution_risco.empty:
-        resultado["ATTRIBUTION_POR_RISCO"] = resultado["CNPJ_FUNDO"].map(indice_attribution_risco)
-    elif not resultado.empty:
-        resultado["ATTRIBUTION_POR_RISCO"] = None
+    indice = calcular_indice_attribution_risco(attribution, risco_atribuido)
+    resultado["ATTRIBUTION_POR_RISCO"] = resultado["CNPJ_FUNDO"].map(indice) if not resultado.empty else None
 
     return resultado, correlacao, covariancia

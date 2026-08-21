@@ -51,7 +51,7 @@ def carregar_depara_fundos() -> pd.DataFrame:
 
     classes = classes[
         (classes["Situacao"].str.strip() == "Em Funcionamento Normal")
-        & (classes["Classificacao"].str.strip().isin(["Ações", "Multimercado"]))
+        & (classes["Classificacao"].str.strip().isin(["Ações", "Multimercado", ""]))
     ].copy()
 
     df = classes.merge(fundos, on="ID_Registro_Fundo", how="inner")

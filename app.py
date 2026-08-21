@@ -14,6 +14,7 @@ from services.exportacao_service import (
     obter_arquivo_exportacao,
 )
 from services.portfolio import portfolio as calcular_portfolio
+from services.cvm import listar_subclasses_fundo, normalizar_id_subclasse
 from services.exportacao_portfolio import gerar_excel_portfolio
 from services.carteira_service import (
     salvar_carteira,
@@ -83,6 +84,18 @@ def buscar_fundos():
     resultado = df_fundos[filtro_nome | filtro_cnpj].head(10)
 
     return jsonify(resultado.to_dict(orient="records"))
+
+
+@app.get("/api/fundos/subclasses")
+def listar_subclasses():
+    """Informa as subclasses disponíveis para a seleção dinâmica da tela."""
+    cnpj = request.args.get("cnpj", "").strip()
+    if not cnpj:
+        return jsonify({"erro": "Informe o parâmetro cnpj"}), 400
+    try:
+        return jsonify({"cnpj": cnpj, "subclasses": listar_subclasses_fundo(cnpj)})
+    except (ValueError, TypeError) as erro:
+        return jsonify({"erro": str(erro)}), 400
 
 
 @app.route("/api/periodos/padrao")
@@ -227,14 +240,36 @@ def gerar_portfolio():
     anterior.
     """
     dados = request.get_json(silent=True) or {}
-    cnpjs = dados.get("fundos")
+    fundos_recebidos = dados.get("fundos")
     data_referencia = dados.get("data_referencia")
     # Opcional: { "<cnpj>": peso_percentual (0-100), ... } — vindo dos
     # inputs de peso da tela. Convertemos para fração (0-1) aqui.
     pesos_recebidos = dados.get("pesos")
 
-    if not cnpjs:
+    if not fundos_recebidos:
         return jsonify({"erro": "Nenhum fundo informado"}), 400
+
+    # Aceita a lista antiga de CNPJs e o novo formato por fundo:
+    # {cnpj: "...", id_subclasse: "..."}. O ID é validado no servidor
+    # para impedir que uma requisição calcule uma combinação inexistente.
+    cnpjs = []
+    subclasses = {}
+    for fundo in fundos_recebidos:
+        if isinstance(fundo, dict):
+            cnpj = str(fundo.get("cnpj", "")).strip()
+            id_subclasse = normalizar_id_subclasse(fundo.get("id_subclasse"))
+        else:
+            cnpj = str(fundo).strip()
+            id_subclasse = None
+        if not cnpj or cnpj in cnpjs:
+            continue
+        disponiveis = listar_subclasses_fundo(cnpj)
+        if disponiveis and id_subclasse is None:
+            return jsonify({"erro": f"Selecione uma subclasse para o fundo {cnpj}"}), 400
+        if id_subclasse is not None and id_subclasse not in disponiveis:
+            return jsonify({"erro": f"Subclasse inválida para o fundo {cnpj}"}), 400
+        cnpjs.append(cnpj)
+        subclasses[cnpj] = id_subclasse
 
     if data_referencia:
         try:
@@ -252,17 +287,23 @@ def gerar_portfolio():
         except (TypeError, ValueError):
             return jsonify({"erro": "Os pesos devem ser números"}), 400
 
-    fundos_selecionados = df_fundos[
-        df_fundos["CNPJ_FUNDO"].isin(cnpjs)
-    ].copy()
-
-    if fundos_selecionados.empty:
-        return jsonify({"erro": "Nenhum dos fundos informados foi encontrado"}), 400
+    fundos_selecionados = df_fundos[df_fundos["CNPJ_FUNDO"].isin(cnpjs)].copy()
+    # Carteiras antigas podem conter fundos que já não aparecem no cadastro
+    # corrente da CVM. O histórico continua sendo a fonte dos cálculos, então
+    # não descarte esses CNPJs apenas por não haver um nome atualizado.
+    encontrados = set(fundos_selecionados["CNPJ_FUNDO"])
+    ausentes = [cnpj for cnpj in cnpjs if cnpj not in encontrados]
+    if ausentes:
+        fundos_selecionados = pd.concat([
+            fundos_selecionados,
+            pd.DataFrame({"CNPJ_FUNDO": ausentes, "DENOM_SOCIAL": ausentes}),
+        ], ignore_index=True)
 
     resultado, correlacao, covariancia = calcular_portfolio(
         fundos_selecionados,
         pesos=pesos,
         data_referencia=data_referencia,
+        subclasses=subclasses,
     )
 
     if resultado.empty:
@@ -274,7 +315,7 @@ def gerar_portfolio():
 
     # Junta o nome do fundo ao resultado (o service só trabalha com CNPJ)
     resultado = resultado.merge(
-        df_fundos[["CNPJ_FUNDO", "DENOM_SOCIAL"]],
+        fundos_selecionados[["CNPJ_FUNDO", "DENOM_SOCIAL"]].drop_duplicates("CNPJ_FUNDO"),
         on="CNPJ_FUNDO",
         how="left",
     )
@@ -283,6 +324,7 @@ def gerar_portfolio():
         {
             "cnpj": linha["CNPJ_FUNDO"],
             "nome": linha["DENOM_SOCIAL"],
+            "id_subclasse": subclasses.get(linha["CNPJ_FUNDO"]),
             "rentabilidade_36m": round(linha["RENTABILIDADE"], 2),
             "volatilidade_36m": round(linha["VOLATILIDADE"], 2),
             "risco_atribuido": (
