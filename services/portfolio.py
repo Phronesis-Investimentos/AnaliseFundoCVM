@@ -59,7 +59,7 @@ def carregar_historico_36meses(
                 id_subclasse=(subclasses or {}).get(cnpj),
             )
             if df_inicio.empty:
-                print(f"  ⚠️ Nenhum histórico encontrado para {cnpj}")
+                print(f"  [AVISO] Nenhum histórico encontrado para {cnpj}")
                 continue
 
             df_inicio = df_inicio.copy()
@@ -72,9 +72,9 @@ def carregar_historico_36meses(
 
             if not df_inicio.empty:
                 historicos_desde_inicio.append(df_inicio[colunas])
-                print(f"  ✅ {len(df_inicio)} cotas | {df_inicio['DT_COMPTC'].iloc[0]:%d/%m/%Y} até {df_inicio['DT_COMPTC'].iloc[-1]:%d/%m/%Y}")
+                print(f"  [OK] {len(df_inicio)} cotas | {df_inicio['DT_COMPTC'].iloc[0]:%d/%m/%Y} até {df_inicio['DT_COMPTC'].iloc[-1]:%d/%m/%Y}")
         except Exception as erro:
-            print(f"  ❌ Erro ao buscar início do fundo {cnpj}: {erro}")
+            print(f"  [ERRO] Erro ao buscar início do fundo {cnpj}: {erro}")
 
     if fundos_incompletos and not df.empty:
         df = df[~df["CNPJ_FUNDO"].isin(fundos_incompletos)].copy()

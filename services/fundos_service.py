@@ -303,7 +303,7 @@ def processar_comparacao_fundos(
         # Processa períodos normais (12m, 24m, 36m, 48m, 60m)
         # ==========================================
         if periodos_normais and data_inicial_geral:
-            print(f"\n📊 Processando períodos normais para {nome}")
+            print(f"\n[INFO] Processando períodos normais para {nome}")
 
             # Carrega dados uma única vez para o intervalo geral
             df = carregar_historico_fundo(
@@ -336,7 +336,7 @@ def processar_comparacao_fundos(
         # Processa período "Desde o Início"
         # ==========================================
         for periodo in periodos_inicio:
-            print(f"\n🔍 Calculando 'Desde o Início' para {nome}")
+            print(f"\n[INFO] Calculando 'Desde o Início' para {nome}")
 
             # Carrega histórico completo do fundo
             df_completo = carregar_historico_fundo(
@@ -378,11 +378,11 @@ def processar_comparacao_fundos(
 
                 # Print com precisão total (12 casas decimais), para bater exatamente
                 # com o valor usado no cálculo de variação/volatilidade.
-                print(f"  ✅ Primeira cota: {primeira_data.strftime('%d/%m/%Y')} → R$ {valor_primeira_cota:.12f}")
-                print(f"  ✅ Última cota: {ultima_data.strftime('%d/%m/%Y')} → R$ {valor_ultima_cota:.12f}")
-                print(f"  ✅ Dias totais: {dias_totais}")
-                print(f"  ✅ Variação: {variacao:.2f}%")
-                print(f"  ✅ Volatilidade: {volatilidade:.2f}%")
+                print(f"  [OK] Primeira cota: {primeira_data.strftime('%d/%m/%Y')} -> R$ {valor_primeira_cota:.12f}")
+                print(f"  [OK] Última cota: {ultima_data.strftime('%d/%m/%Y')} -> R$ {valor_ultima_cota:.12f}")
+                print(f"  [OK] Dias totais: {dias_totais}")
+                print(f"  [OK] Variação: {variacao:.2f}%")
+                print(f"  [OK] Volatilidade: {volatilidade:.2f}%")
 
                 variacoes.append({
                     "data_inicial": primeira_data.strftime("%Y-%m-%d"),
@@ -398,7 +398,7 @@ def processar_comparacao_fundos(
                     "dias_totais": dias_totais
                 })
             else:
-                print(f"  ❌ Dados não encontrados para {nome}")
+                print(f"  [ERRO] Dados não encontrados para {nome}")
                 variacoes.append({
                     "data_inicial": None,
                     "data_final": periodo["data_final"],

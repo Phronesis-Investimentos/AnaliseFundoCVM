@@ -426,7 +426,7 @@ def carregar_historico_fundos(
     except Exception as erro:
 
         print(
-            f"❌ Erro ao carregar fundos elegíveis: {erro}"
+            f"[ERRO] Erro ao carregar fundos elegíveis: {erro}"
         )
 
         return pd.DataFrame(
@@ -440,7 +440,7 @@ def carregar_historico_fundos(
     if elegiveis.empty:
 
         print(
-            "⚠️ Nenhum fundo elegível encontrado."
+            "[AVISO] Nenhum fundo elegível encontrado."
         )
 
         return pd.DataFrame(
@@ -492,7 +492,7 @@ def carregar_historico_fundos(
     if not cnpjs_elegiveis:
 
         print(
-            "⚠️ Nenhum dos fundos solicitados possui "
+            "[AVISO] Nenhum dos fundos solicitados possui "
             f"{minimo_cotistas} ou mais cotistas."
         )
 
@@ -513,7 +513,7 @@ def carregar_historico_fundos(
     )
 
     for cnpj in sorted(cnpjs_elegiveis):
-        print(f"  ✅ {cnpj}")
+        print(f"  [OK] {cnpj}")
 
     # A partir daqui NÃO usamos mais `cnpjs`.
     #
@@ -728,7 +728,7 @@ def encontrar_primeira_cota(cnpj: str, id_subclasse: str | None = None) -> pd.Da
                     if not df_ano.empty:
                         # Encontrou! Pega a primeira cota
                         primeira_cota = df_ano.sort_values("DT_COMPTC").iloc[0]
-                        print(f"  ✅ Primeira cota encontrada em {primeira_cota['DT_COMPTC'].strftime('%d/%m/%Y')}")
+                        print(f"  [OK] Primeira cota encontrada em {primeira_cota['DT_COMPTC'].strftime('%d/%m/%Y')}")
                         print(f"  Valor: R$ {primeira_cota['VL_QUOTA']:.6f}")
                         return filtrar_por_subclasse(df_ano, id_subclasse).sort_values("DT_COMPTC").head(1)
         
@@ -747,7 +747,7 @@ def encontrar_primeira_cota(cnpj: str, id_subclasse: str | None = None) -> pd.Da
                 if not df_mes.empty:
                     # Encontrou!
                     primeira_cota = df_mes.sort_values("DT_COMPTC").iloc[0]
-                    print(f"  ✅ Primeira cota encontrada em {primeira_cota['DT_COMPTC'].strftime('%d/%m/%Y')}")
+                    print(f"  [OK] Primeira cota encontrada em {primeira_cota['DT_COMPTC'].strftime('%d/%m/%Y')}")
                     print(f"  Valor: R$ {primeira_cota['VL_QUOTA']:.6f}")
                     return filtrar_por_subclasse(df_mes, id_subclasse).sort_values("DT_COMPTC").head(1)
             
@@ -866,11 +866,11 @@ def carregar_desde_inicio(cnpj: str, data_final: str, id_subclasse: str | None =
     df_primeira = encontrar_primeira_cota(cnpj, id_subclasse=id_subclasse)
     
     if df_primeira.empty:
-        print("❌ Nenhuma cota encontrada para este fundo")
+        print("[ERRO] Nenhuma cota encontrada para este fundo")
         return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
     
     primeira_data = df_primeira.iloc[0]["DT_COMPTC"]
-    print(f"✅ Primeira cota: {primeira_data.strftime('%d/%m/%Y')}")
+    print(f"[OK] Primeira cota: {primeira_data.strftime('%d/%m/%Y')}")
     
     # Passo 2: Carrega do início até a data final
     # Usa a função normal com a data da primeira cota
@@ -918,7 +918,7 @@ def carregar_desde_inicio(cnpj: str, data_final: str, id_subclasse: str | None =
     df_completo = df_completo.drop_duplicates(subset=["DT_COMPTC"])
     df_completo = df_completo.sort_values("DT_COMPTC")
     
-    print(f"✅ Total de {len(df_completo)} registros carregados")
+    print(f"[OK] Total de {len(df_completo)} registros carregados")
     
     return df_completo
 
