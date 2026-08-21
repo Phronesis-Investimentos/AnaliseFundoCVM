@@ -12,6 +12,9 @@ COR_HEADER_TEXTO = "FFFFFF"
 COR_POSITIVO = "008000"
 COR_NEGATIVO = "CC0000"
 COR_CINZA_CLARO = "F2F2F2"
+# Covariâncias ponderadas costumam estar na ordem de 10⁻⁶ ou menores.
+# Notação científica conserva a leitura sem arredondar valores válidos a zero.
+FORMATO_COVARIANCIA = "0.000000E+00"
 
 
 def _autofit_colunas(ws, largura_min=10, largura_max=45):
@@ -53,7 +56,7 @@ def _montar_aba_portfolio(
     linha_cabecalho = 4
     colunas = [
         "CNPJ", "Nome do Fundo", "Rentabilidade (36m)", "Volatilidade (36m)",
-        "Peso", "Risco Atribuído", "Attribution", "Attribution / Risco",
+        "Peso", "Risk Attribution", "Attribution", "Attribution / Risk",
     ]
 
     for idx, titulo in enumerate(colunas, start=1):
@@ -288,8 +291,8 @@ def _montar_aba_covariancia(
             valor = covariancia.get(cnpj_coluna, {}).get(cnpj_linha)
             cel = ws.cell(row=linha, column=coluna_inicial + col_idx)
             if valor is not None:
-                cel.value = round(float(valor), 4)
-                cel.number_format = "0.00"
+                cel.value = float(valor)
+                cel.number_format = FORMATO_COVARIANCIA
             else:
                 cel.value = "—"
             cel.alignment = Alignment(horizontal="center")
@@ -304,7 +307,7 @@ def _montar_aba_covariancia(
     if len(cnpjs) >= 2:
         linha_risco = ultima_linha_dados + 2
 
-        cel_titulo = ws.cell(row=linha_risco, column=1, value="Risco Atribuído")
+        cel_titulo = ws.cell(row=linha_risco, column=1, value="Risk Attribution")
         cel_titulo.font = Font(name=fonte_padrao, size=10, bold=True, color=COR_HEADER_TEXTO)
         cel_titulo.fill = PatternFill(start_color=COR_NEON, end_color=COR_NEON, fill_type="solid")
         cel_titulo.alignment = Alignment(horizontal="right", vertical="center")

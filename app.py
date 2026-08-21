@@ -348,13 +348,15 @@ def gerar_portfolio():
 
     # Matriz de correlação -> dict serializável { cnpj: { cnpj: valor } }
     correlacao_json = (
-        correlacao.round(2).where(pd.notnull(correlacao), None).to_dict()
+        # A interface exibe duas casas, mas mantém precisão maior no payload
+        # para a covariância exportada não ser reduzida a zero.
+        correlacao.round(10).where(pd.notnull(correlacao), None).to_dict()
         if not correlacao.empty else {}
     )
 
     # Matriz de covariância (correlação x volatilidade x peso de cada par)
     covariancia_json = (
-        covariancia.round(4).where(pd.notnull(covariancia), None).to_dict()
+        covariancia.where(pd.notnull(covariancia), None).to_dict()
         if not covariancia.empty else {}
     )
 

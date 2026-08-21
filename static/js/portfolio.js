@@ -183,16 +183,25 @@ document.addEventListener("DOMContentLoaded", () => {
         divFundosAdicionados.innerHTML = '';
         fundosPortfolio.forEach((fundo, idx) => {
             const chip = document.createElement('div');
-            chip.className = 'flex items-center gap-2 bg-neon/10 border border-neon/20 text-neon px-3 py-1 rounded-full text-xs animate-fade-in-up';
+            chip.className = 'portfolio-fundo-card animate-fade-in-up';
             chip.innerHTML = `
-                <span class="truncate max-w-[220px]">${fundo.nome}</span>
+                <div class="portfolio-fundo-identidade">
+                    <span class="portfolio-fundo-icone"><i class="ph ph-chart-line-up"></i></span>
+                    <span class="min-w-0">
+                        <strong title="${fundo.nome}">${fundo.nome}</strong>
+                        <small>${fundo.cnpj}</small>
+                    </span>
+                </div>
                 ${fundo.subclasses && fundo.subclasses.length > 1 ? `
-                    <select data-subclasse-idx="${idx}" class="bg-transparent border border-neon/30 rounded px-1 py-0.5 text-[11px] focus:outline-none">
-                        <option value="">Subclasse...</option>
-                        ${fundo.subclasses.map(id => `<option value="${id}" ${fundo.id_subclasse === id ? 'selected' : ''}>${id}</option>`).join('')}
-                    </select>` : ''}
-                ${fundo.subclasses && fundo.subclasses.length === 1 ? `<span class="text-[10px] opacity-75">Subclasse ${fundo.id_subclasse}</span>` : ''}
-                <i class="ph ph-x cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" data-idx="${idx}"></i>
+                    <label class="portfolio-subclasse-campo">
+                        <span>Subclasse</span>
+                        <select data-subclasse-idx="${idx}">
+                            <option value="">Selecione</option>
+                            ${fundo.subclasses.map(id => `<option value="${id}" ${fundo.id_subclasse === id ? 'selected' : ''}>${id}</option>`).join('')}
+                        </select>
+                    </label>` : ''}
+                ${fundo.subclasses && fundo.subclasses.length === 1 ? `<span class="portfolio-subclasse-fixa">Subclasse <b>${fundo.id_subclasse}</b></span>` : ''}
+                <button type="button" class="portfolio-remover-fundo" title="Remover fundo" data-idx="${idx}"><i class="ph ph-x"></i></button>
             `;
             const seletor = chip.querySelector('[data-subclasse-idx]');
             if (seletor) {
@@ -201,7 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     atualizarEstadoGerarPortfolio();
                 });
             }
-            chip.querySelector('i').addEventListener('click', () => {
+            chip.querySelector('[data-idx]').addEventListener('click', () => {
                 fundosPortfolio.splice(idx, 1);
                 renderChipsFundos();
             });
@@ -752,7 +761,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const riscoAtribuido = calcularRiskAttribution(covariancia);
         const tfoot = document.createElement('tfoot');
         const trFoot = document.createElement('tr');
-        let footHtml = `<th class="p-2 pt-4 font-semibold text-gray-900 dark:text-white text-[10px] text-right border-t border-gray-200 dark:border-white/10">Risco Atribuído</th>`;
+        let footHtml = `<th class="p-2 pt-4 font-semibold text-gray-900 dark:text-white text-[10px] text-right border-t border-gray-200 dark:border-white/10">Risk Attribution</th>`;
         cnpjs.forEach(cnpj => {
             const valor = riscoAtribuido[cnpj];
             const texto = (valor === null || valor === undefined || isNaN(valor)) ? '—' : `${valor.toFixed(2)}%`;
@@ -877,13 +886,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 : pesoIgual.toFixed(2);
 
             linha.innerHTML = `
-                <td class="px-4 py-4 text-xs text-gray-500 dark:text-gray-400">${fundo.cnpj}</td>
-                <td class="px-4 py-4 text-gray-800 dark:text-gray-200">
-                    <div class="truncate max-w-[260px] text-sm font-medium" title="${fundo.nome}">${fundo.nome}</div>
+                <td class="px-3 py-3 text-gray-800 dark:text-gray-200 portfolio-fundo-coluna">
+                    <div class="truncate text-sm font-medium" title="${fundo.nome}">${fundo.nome}</div>
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">${fundo.cnpj}</div>
                 </td>
-                <td class="px-4 py-4 text-right">${formatValue(fundo.rentabilidade_36m)}</td>
-                <td class="px-4 py-4 text-center">${formatVolatilidade(fundo.volatilidade_36m)}</td>
-                <td class="px-4 py-4 text-center">
+                <td class="px-2 py-3 text-right">${formatValue(fundo.rentabilidade_36m)}</td>
+                <td class="px-2 py-3 text-center">${formatVolatilidade(fundo.volatilidade_36m)}</td>
+                <td class="px-2 py-3 text-center">
                     <div class="relative inline-flex items-center">
                         <input type="number" min="0" max="100" step="0.01"
                                data-peso-cnpj="${fundo.cnpj}"

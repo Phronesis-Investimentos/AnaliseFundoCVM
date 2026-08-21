@@ -199,6 +199,63 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 }
 .vol-badge-na .vol-dot { background-color: #6b7280; }
 
+/* Portfólio: seleção de fundos e tabela compactas */
+.portfolio-fundos-selecionados {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 10px;
+}
+
+.portfolio-fundo-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(177, 17, 22, 0.20);
+    border-radius: 14px;
+    background: rgba(177, 17, 22, 0.055);
+    color: inherit;
+}
+.portfolio-fundo-identidade { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
+.portfolio-fundo-identidade strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.portfolio-fundo-identidade small { display: block; margin-top: 2px; color: #6b7280; font-size: 10px; }
+.portfolio-fundo-icone { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 9px; color: #b11116; background: rgba(177, 17, 22, 0.12); }
+.portfolio-subclasse-campo { display: grid; gap: 3px; flex: 0 0 auto; color: #6b7280; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.portfolio-subclasse-campo select { min-width: 105px; padding: 4px 23px 4px 7px; border: 1px solid rgba(177, 17, 22, .28); border-radius: 7px; background: rgba(255,255,255,.55); color: inherit; font-size: 11px; text-transform: none; letter-spacing: normal; }
+.portfolio-subclasse-fixa { flex: 0 0 auto; padding: 5px 7px; border-radius: 7px; color: #8a4247; background: rgba(177, 17, 22, .09); font-size: 10px; }
+.portfolio-remover-fundo { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 auto; border-radius: 8px; color: #6b7280; transition: .2s; }
+.portfolio-remover-fundo:hover { color: #b11116; background: rgba(177, 17, 22, .10); }
+
+.portfolio-tabela-wrapper { overflow: hidden; }
+.portfolio-tabela { table-layout: fixed; }
+.portfolio-tabela th, .portfolio-tabela td { vertical-align: middle; }
+.portfolio-tabela th:first-child, .portfolio-tabela td:first-child { width: 25%; }
+.portfolio-tabela th:nth-child(2), .portfolio-tabela td:nth-child(2) { width: 10%; }
+.portfolio-tabela th:nth-child(3), .portfolio-tabela td:nth-child(3) { width: 12%; }
+.portfolio-tabela th:nth-child(4), .portfolio-tabela td:nth-child(4) { width: 12%; }
+.portfolio-tabela th:nth-child(n+5), .portfolio-tabela td:nth-child(n+5) { width: 12%; }
+.portfolio-fundo-coluna { overflow: hidden; }
+
+html.dark .portfolio-fundo-card { border-color: rgba(199, 106, 112, .28); background: rgba(199, 106, 112, .08); }
+html.dark .portfolio-fundo-icone { color: #e6a0a4; background: rgba(199, 106, 112, .16); }
+html.dark .portfolio-subclasse-campo select { background: rgba(22, 25, 31, .9); border-color: rgba(199, 106, 112, .35); }
+html.dark .portfolio-subclasse-fixa { color: #e7a8ac; background: rgba(199, 106, 112, .14); }
+
+@media (max-width: 1100px) {
+    .portfolio-tabela th:nth-child(6), .portfolio-tabela td:nth-child(6),
+    .portfolio-tabela th:nth-child(7), .portfolio-tabela td:nth-child(7) { display: none; }
+    .portfolio-tabela th:first-child, .portfolio-tabela td:first-child { width: 32%; }
+}
+@media (max-width: 700px) {
+    .portfolio-fundos-selecionados { grid-template-columns: 1fr; }
+    .portfolio-fundo-card { flex-wrap: wrap; }
+    .portfolio-subclasse-campo { margin-left: 37px; }
+    .portfolio-tabela th:nth-child(5), .portfolio-tabela td:nth-child(5),
+    .portfolio-tabela th:nth-child(8), .portfolio-tabela td:nth-child(8) { display: none; }
+    .portfolio-tabela th:first-child, .portfolio-tabela td:first-child { width: 44%; }
+}
+
 /* ===========================
    Modal Ranking
 =========================== */

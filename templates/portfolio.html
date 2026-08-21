@@ -141,7 +141,7 @@
             </div>
 
             <!-- Chips de Fundos Adicionados -->
-            <div id="fundos_portfolio_adicionados" class="flex flex-wrap gap-2 empty:hidden min-h-[20px] mt-6">
+            <div id="fundos_portfolio_adicionados" class="portfolio-fundos-selecionados empty:hidden min-h-[20px] mt-6">
                 <!-- Injetado via JS -->
             </div>
 
@@ -194,18 +194,17 @@
                 </div>
             </div>
 
-            <div class="overflow-x-auto rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/40 m-4 mt-0">
-                <table class="w-full text-left text-sm whitespace-nowrap">
+            <div class="portfolio-tabela-wrapper rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/40 m-4 mt-0">
+                <table class="portfolio-tabela w-full text-left text-sm">
                     <thead class="bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/10">
                         <tr>
-                            <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">CNPJ</th>
-                            <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Nome</th>
-                            <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-right">Rentabilidade (36m)</th>
-                            <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-center">Volatilidade (36m)</th>
+                            <th class="px-3 py-3 font-medium text-gray-600 dark:text-gray-400">Fundo</th>
+                            <th class="px-2 py-3 font-medium text-gray-600 dark:text-gray-400 text-right">Rentab.<span class="hidden xl:inline"> (36m)</span></th>
+                            <th class="px-2 py-3 font-medium text-gray-600 dark:text-gray-400 text-center">Vol.<span class="hidden xl:inline"> (36m)</span></th>
                             <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-center">Peso</th>
-                            <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-center" title="Soma da coluna do fundo na matriz de covariância ÷ soma total da matriz">Risco Atribuído</th>
+                            <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-center" title="Soma da coluna do fundo na matriz de covariância ÷ soma total da matriz">Risk Attribution</th>
                             <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-center" title="Rentabilidade (36m) × peso">Attribution</th>
-                            <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-center" title="Attribution ÷ |Risco Atribuído|">Attribution / Risco</th>
+                            <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-center" title="Attribution ÷ |Risk Attribution|">Attribution / Risk</th>
                             <th class="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-center w-10"></th>
                         </tr>
                     </thead>
