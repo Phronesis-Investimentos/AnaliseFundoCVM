@@ -2,7 +2,8 @@ import os
 import threading
 
 import pandas as pd
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, current_app
+from werkzeug.exceptions import HTTPException
 from waitress import serve
 
 from services.nome_fundo import carregar_depara_fundos
@@ -35,6 +36,17 @@ from utils.validacoes import (
 )
 
 app = Flask(__name__)
+
+
+@app.errorhandler(Exception)
+def tratar_erro_na_api(erro):
+    """Mantém os endpoints JSON mesmo quando ocorre uma falha não prevista."""
+    if isinstance(erro, HTTPException):
+        return erro
+    current_app.logger.exception("Erro não tratado em %s", request.path)
+    if request.path.startswith("/api/"):
+        return jsonify({"erro": "Não foi possível concluir a consulta. Verifique os logs do servidor."}), 500
+    return "Erro interno do servidor.", 500
 
 # O servidor deve iniciar mesmo se o cadastro da CVM estiver lento ou fora do ar.
 # A lista é preenchida em segundo plano e cada requisição passa a usar o cadastro

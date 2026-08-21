@@ -8,6 +8,9 @@ from datetime import datetime
 URL_BASE = "https://dados.cvm.gov.br/dados/FI/DOC/INF_DIARIO/DADOS"
 URL_BASE_HIST = f"{URL_BASE}/HIST"
 session = requests.Session()
+# A VM pode ter variáveis de proxy apontando para um serviço local inexistente
+# (por exemplo, 127.0.0.1:9). As consultas da CVM devem usar a conexão direta.
+session.trust_env = False
 
 COLUNAS_HISTORICO = ["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA", "ID_SUBCLASSE"]
 
