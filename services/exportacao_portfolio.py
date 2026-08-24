@@ -1,4 +1,5 @@
 import io
+import math
 from datetime import datetime
 
 from openpyxl import Workbook
@@ -58,6 +59,9 @@ def _aplicar_metricas_por_peso(fundos: list[dict], correlacao: dict) -> list[dic
         fundo["attribution_por_risco"] = (
             attribution / abs(risco) if attribution is not None and risco not in (None, 0) else None
         )
+        # Risco do portfólio = raiz quadrada da soma da covariância. O total
+        # bruto continua sendo usado acima para o Risk Attribution.
+        fundo["risco_total"] = math.sqrt(total) if total >= 0 else None
     return fundos_calculados
 
 
@@ -215,6 +219,36 @@ def _montar_aba_portfolio(
         cel_total.font = Font(name=fonte_padrao, size=10, bold=True)
         cel_total.alignment = Alignment(horizontal="center")
 
+        # Soma do Attribution do portfólio. Fórmula, e não valor fixo, para
+        # acompanhar qualquer ajuste de pesos feito diretamente na planilha.
+        ws.cell(row=linha_total, column=6, value="Attribution Total").font = Font(
+            name=fonte_padrao, size=10, bold=True
+        )
+        ws.cell(row=linha_total, column=6).alignment = Alignment(horizontal="right")
+        cel_attribution_total = ws.cell(
+            row=linha_total,
+            column=7,
+            value=f"=SUM(G{primeira_linha_dados}:G{ultima_linha})",
+        )
+        cel_attribution_total.number_format = "0.00%"
+        cel_attribution_total.font = Font(name=fonte_padrao, size=10, bold=True, color="000000")
+        cel_attribution_total.alignment = Alignment(horizontal="center")
+
+        linha_risco_total = linha_total + 1
+        ws.cell(row=linha_risco_total, column=6, value="Risco Total").font = Font(
+            name=fonte_padrao, size=10, bold=True
+        )
+        ws.cell(row=linha_risco_total, column=6).alignment = Alignment(horizontal="right")
+        cel_risco_total = ws.cell(row=linha_risco_total, column=7)
+        risco_total = fundos[0].get("risco_total")
+        if risco_total is not None:
+            cel_risco_total.value = float(risco_total)
+            cel_risco_total.number_format = "0.00%"
+            cel_risco_total.font = Font(name=fonte_padrao, size=10, bold=True, color="000000")
+        else:
+            cel_risco_total.value = "—"
+        cel_risco_total.alignment = Alignment(horizontal="center")
+
     ws.freeze_panes = f"A{primeira_linha_dados}"
     _autofit_colunas(ws)
 
@@ -278,6 +312,7 @@ def _montar_aba_correlacao(wb: Workbook, fundos: list[dict], correlacao: dict, n
             end_type="num", end_value=1, end_color="00E58C",
         )
         ws.conditional_formatting.add(intervalo, regra)
+
 
     ws.freeze_panes = ws.cell(row=primeira_linha_dados, column=coluna_inicial).coordinate
     _autofit_colunas(ws, largura_min=10, largura_max=22)

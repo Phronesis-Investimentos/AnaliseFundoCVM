@@ -1,0 +1,103 @@
+/* Phronesis Design System — inspirado em interfaces de alta clareza.
+   Tokens e componentes compartilhados; nenhuma regra de negócio depende dele. */
+:root {
+    --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", sans-serif;
+    --color-bg: #f5f5f7;
+    --color-surface: rgba(255, 255, 255, .88);
+    --color-surface-muted: #fbfbfd;
+    --color-text: #1d1d1f;
+    --color-secondary: #6e6e73;
+    --color-border: rgba(0, 0, 0, .10);
+    --color-accent: #66142d;
+    --color-accent-hover: #7a1936;
+    --radius-sm: 10px;
+    --radius-md: 18px;
+    --radius-lg: 28px;
+    --shadow-card: 0 8px 24px rgba(0, 0, 0, .06);
+    --shadow-hover: 0 14px 32px rgba(0, 0, 0, .10);
+    --content-max: 1240px;
+}
+
+html.dark {
+    --color-bg: #000;
+    --color-surface: rgba(29, 29, 31, .88);
+    --color-surface-muted: #1d1d1f;
+    --color-text: #f5f5f7;
+    --color-secondary: #a1a1a6;
+    --color-border: rgba(255, 255, 255, .14);
+    --color-accent: #b84b69;
+    --color-accent-hover: #cd5a79;
+    --shadow-card: none;
+    --shadow-hover: 0 12px 32px rgba(0, 0, 0, .32);
+}
+
+html, body { font-family: var(--font-system) !important; }
+body { background: var(--color-bg) !important; color: var(--color-text) !important; letter-spacing: -.012em; }
+body > div.fixed.bg-neonDim { opacity: .035 !important; }
+
+/* Layout e superfícies */
+.max-w-6xl, .max-w-5xl { max-width: var(--content-max) !important; }
+.glass-panel {
+    background: var(--color-surface) !important;
+    border: 1px solid var(--color-border) !important;
+    box-shadow: var(--shadow-card) !important;
+    backdrop-filter: saturate(180%) blur(20px) !important;
+    -webkit-backdrop-filter: saturate(180%) blur(20px) !important;
+}
+.tilt-card { transform: none !important; }
+.tilt-card:hover { box-shadow: var(--shadow-hover) !important; }
+
+/* Tipografia */
+h1, h2, h3 { color: var(--color-text); letter-spacing: -.035em !important; }
+h1 { font-weight: 600 !important; }
+h2, h3 { font-weight: 600 !important; }
+p { line-height: 1.55; }
+.text-neon { color: var(--color-accent) !important; }
+.bg-neon { background-color: var(--color-accent) !important; }
+.bg-neon\/10 { background-color: color-mix(in srgb, var(--color-accent) 10%, transparent) !important; }
+
+/* Controles: tamanho de toque, foco e transições discretas */
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+button, a[class*="rounded"], input, select {
+    transition: background-color .22s ease, border-color .22s ease, color .22s ease, box-shadow .22s ease, transform .22s ease !important;
+}
+button:not(.portfolio-cenario-tab), input, select { min-height: 44px; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--color-accent) 35%, transparent) !important;
+    outline-offset: 2px;
+}
+input, select, textarea {
+    border-color: var(--color-border) !important;
+    background: var(--color-surface-muted) !important;
+    color: var(--color-text) !important;
+    border-radius: var(--radius-sm) !important;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--color-accent) !important; box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 14%, transparent) !important; }
+
+/* CTAs e botões utilitários */
+.bg-gray-900, .dark\:bg-white { background-color: var(--color-accent) !important; color: #fff !important; }
+.bg-gray-900:hover, .dark\:bg-white:hover { background-color: var(--color-accent-hover) !important; transform: translateY(-1px); }
+.magnetic-btn { transform: none !important; }
+.rounded-3xl { border-radius: var(--radius-lg) !important; }
+.rounded-2xl { border-radius: var(--radius-md) !important; }
+.rounded-xl { border-radius: var(--radius-sm) !important; }
+
+/* Dados e tabelas */
+table { border-collapse: separate; border-spacing: 0; }
+thead { background: color-mix(in srgb, var(--color-surface-muted) 90%, var(--color-accent) 2%) !important; }
+th { color: var(--color-secondary) !important; font-size: 11px; font-weight: 600 !important; letter-spacing: .015em; text-transform: uppercase; }
+tbody tr:hover { background: color-mix(in srgb, var(--color-accent) 4%, transparent) !important; }
+
+/* Navegação/ações no topo */
+#btn_toggle_tema, header > div > a { backdrop-filter: blur(16px); border-color: var(--color-border) !important; background: var(--color-surface) !important; color: var(--color-text) !important; }
+
+@media (min-width: 900px) {
+    .max-w-6xl, .max-w-5xl { padding-top: 88px !important; padding-bottom: 88px !important; }
+    section.glass-panel { margin-bottom: 32px !important; }
+}
+@media (max-width: 700px) {
+    .max-w-6xl, .max-w-5xl { padding-left: 18px !important; padding-right: 18px !important; padding-top: 36px !important; }
+    h1 { font-size: 34px !important; }
+    .glass-panel { border-radius: 20px !important; }
+    .p-8 { padding: 22px !important; }
+}

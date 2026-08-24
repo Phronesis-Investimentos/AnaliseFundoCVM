@@ -32,11 +32,11 @@
                         sans: ['Outfit', 'sans-serif'],
                     },
                     colors: {
-                        background: '#15171c',
+                        background: '#000000',
                         surface: 'rgba(255, 255, 255, 0.03)',
                         surfaceHover: 'rgba(255, 255, 255, 0.08)',
-                        neon: '#c76a70',
-                        neonDim: 'rgba(199, 106, 112, 0.12)'
+                        neon: '#66142d',
+                        neonDim: 'rgba(102, 20, 45, 0.12)'
                     }
                 }
             }
@@ -49,6 +49,7 @@
     <!-- Overrides de tema claro/escuro pros componentes customizados
          (glass-panel, glow de fundo etc.) definidos em style.css -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}">
 </head>
 
 <body class="bg-white text-gray-900 dark:bg-background dark:text-white font-sans antialiased overflow-x-hidden relative min-h-screen">
