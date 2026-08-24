@@ -17,6 +17,50 @@ COR_CINZA_CLARO = "F2F2F2"
 FORMATO_COVARIANCIA = "0.000000E+00"
 
 
+def _aplicar_metricas_por_peso(fundos: list[dict], correlacao: dict) -> list[dict]:
+    """Recalcula métricas dependentes do peso para cada aba exportada."""
+    fundos_calculados = [dict(fundo) for fundo in fundos]
+    por_cnpj = {fundo.get("cnpj"): fundo for fundo in fundos_calculados}
+    cnpjs = [cnpj for cnpj in por_cnpj if cnpj]
+
+    covariancia = {cnpj: {} for cnpj in cnpjs}
+    total = 0.0
+    for coluna in cnpjs:
+        for linha in cnpjs:
+            fundo_linha = por_cnpj[linha]
+            fundo_coluna = por_cnpj[coluna]
+            corr = (correlacao or {}).get(coluna, {}).get(linha)
+            try:
+                valor = (
+                    float(corr)
+                    * (float(fundo_linha.get("volatilidade_36m")) / 100)
+                    * (float(fundo_coluna.get("volatilidade_36m")) / 100)
+                    * (float(fundo_linha.get("peso", 0)) / 100)
+                    * (float(fundo_coluna.get("peso", 0)) / 100)
+                )
+            except (TypeError, ValueError):
+                valor = None
+            covariancia[coluna][linha] = valor
+            if valor is not None:
+                total += valor
+
+    for cnpj, fundo in por_cnpj.items():
+        peso = float(fundo.get("peso", 0) or 0) / 100
+        rentabilidade = fundo.get("rentabilidade_36m")
+        try:
+            attribution = float(rentabilidade) * peso
+        except (TypeError, ValueError):
+            attribution = None
+        soma_coluna = sum(valor for valor in covariancia[cnpj].values() if valor is not None)
+        risco = (soma_coluna / total) * 100 if total else None
+        fundo["risco_atribuido"] = risco
+        fundo["attribution"] = attribution
+        fundo["attribution_por_risco"] = (
+            attribution / abs(risco) if attribution is not None and risco not in (None, 0) else None
+        )
+    return fundos_calculados
+
+
 def _autofit_colunas(ws, largura_min=10, largura_max=45):
     """Ajusta a largura das colunas com base no conteúdo (aproximado)."""
     for coluna_celulas in ws.columns:
@@ -375,7 +419,7 @@ def gerar_excel_portfolio(
             aba_cenario = wb.create_sheet()
             wb.active = wb.index(aba_cenario)
         nome = str(cenario.get("nome") or f"Cenário {indice}")
-        fundos_cenario = cenario.get("fundos") or fundos
+        fundos_cenario = _aplicar_metricas_por_peso(cenario.get("fundos") or fundos, correlacao or {})
         _montar_aba_portfolio(wb, fundos_cenario, data_referencia, nome_aba=nome)
 
     # Correlação independe dos pesos: uma única aba basta para todos os
