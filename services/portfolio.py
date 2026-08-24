@@ -1,6 +1,6 @@
 import pandas as pd
 from services.volatilidade import calcular_volatilidade_periodo
-from services.cvm import carregar_historico_fundos, carregar_desde_inicio, filtrar_por_subclasse
+from services.cvm import carregar_historico_fundo, carregar_historico_fundos, filtrar_por_subclasse
 
 
 def carregar_historico_36meses(
@@ -49,12 +49,18 @@ def carregar_historico_36meses(
     print(f"Fundos com 756 ou mais cotas: {(quantidade >= 756).sum()}")
     print(f"Fundos com menos de 756 cotas: {len(fundos_incompletos)}")
 
-    historicos_desde_inicio = []
+    # Para o Portfólio, fundos novos não precisam de uma varredura desde
+    # 2001: basta obter as cotas existentes nos últimos três anos. A busca
+    # global permanece exclusivamente em `carregar_desde_inicio`, usada pela
+    # comparação no período "Desde o Início".
+    data_inicial_fallback = data_final - pd.DateOffset(years=3)
+    historicos_limitados = []
     for i, cnpj in enumerate(fundos_incompletos, 1):
-        print(f"\n[{i}/{len(fundos_incompletos)}] Buscando histórico completo: {cnpj}")
+        print(f"\n[{i}/{len(fundos_incompletos)}] Buscando histórico desde {data_inicial_fallback:%d/%m/%Y}: {cnpj}")
         try:
-            df_inicio = carregar_desde_inicio(
+            df_inicio = carregar_historico_fundo(
                 cnpj=cnpj,
+                data_inicial=data_inicial_fallback.strftime("%Y-%m-%d"),
                 data_final=data_final.strftime("%Y-%m-%d"),
                 id_subclasse=(subclasses or {}).get(cnpj),
             )
@@ -71,7 +77,7 @@ def carregar_historico_36meses(
             df_inicio = df_inicio.sort_values("DT_COMPTC").drop_duplicates(["CNPJ_FUNDO", "DT_COMPTC"], keep="last")
 
             if not df_inicio.empty:
-                historicos_desde_inicio.append(df_inicio[colunas])
+                historicos_limitados.append(df_inicio[colunas])
                 print(f"  [OK] {len(df_inicio)} cotas | {df_inicio['DT_COMPTC'].iloc[0]:%d/%m/%Y} até {df_inicio['DT_COMPTC'].iloc[-1]:%d/%m/%Y}")
         except Exception as erro:
             print(f"  [ERRO] Erro ao buscar início do fundo {cnpj}: {erro}")
@@ -79,8 +85,8 @@ def carregar_historico_36meses(
     if fundos_incompletos and not df.empty:
         df = df[~df["CNPJ_FUNDO"].isin(fundos_incompletos)].copy()
 
-    if historicos_desde_inicio:
-        df = pd.concat([df, pd.concat(historicos_desde_inicio, ignore_index=True)], ignore_index=True)
+    if historicos_limitados:
+        df = pd.concat([df, pd.concat(historicos_limitados, ignore_index=True)], ignore_index=True)
 
     if df.empty:
         return pd.DataFrame(columns=colunas)

@@ -226,6 +226,10 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 .portfolio-subclasse-fixa { flex: 0 0 auto; padding: 5px 7px; border-radius: 7px; color: #8a4247; background: rgba(177, 17, 22, .09); font-size: 10px; }
 .portfolio-remover-fundo { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 auto; border-radius: 8px; color: #6b7280; transition: .2s; }
 .portfolio-remover-fundo:hover { color: #b11116; background: rgba(177, 17, 22, .10); }
+.portfolio-subclasse-aviso { grid-column: 1 / -1; display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid rgba(177,17,22,.22); border-radius:12px; background:rgba(177,17,22,.055); color:#7f3439; font-size:12px; }
+.portfolio-subclasse-aviso i { display:grid; place-items:center; width:26px; height:26px; border-radius:8px; background:rgba(177,17,22,.12); color:#b11116; font-size:15px; }
+.portfolio-subclasse-aviso strong { display:block; font-size:12px; }
+.portfolio-subclasse-aviso span { display:block; margin-top:1px; color:#6b7280; font-size:11px; }
 
 .portfolio-tabela-wrapper { overflow: hidden; }
 .portfolio-tabela { table-layout: fixed; }
@@ -236,11 +240,20 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 .portfolio-tabela th:nth-child(4), .portfolio-tabela td:nth-child(4) { width: 12%; }
 .portfolio-tabela th:nth-child(n+5), .portfolio-tabela td:nth-child(n+5) { width: 12%; }
 .portfolio-fundo-coluna { overflow: hidden; }
+.portfolio-cenarios { display:flex; align-items:center; gap:7px; flex-wrap:wrap; padding:0 1.5rem .75rem; }
+.portfolio-cenario-tab { padding:6px 10px; border:1px solid rgba(107,114,128,.25); border-radius:8px; font-size:11px; color:#6b7280; transition:.2s; }
+.portfolio-cenario-tab:hover, .portfolio-cenario-tab.ativo { color:#b11116; border-color:rgba(177,17,22,.35); background:rgba(177,17,22,.08); }
+.portfolio-cenario-excluir { display:inline-grid; place-items:center; width:16px; height:16px; margin-left:5px; border-radius:5px; color:inherit; opacity:.65; vertical-align:middle; }
+.portfolio-cenario-excluir:hover { color:#b11116; background:rgba(177,17,22,.12); opacity:1; }
+.portfolio-cenario-adicionar { display:grid; place-items:center; width:28px; height:28px; border-radius:8px; color:#b11116; background:rgba(177,17,22,.1); }
+html.dark .portfolio-cenario-tab.ativo { color:#e6a0a4; border-color:rgba(199,106,112,.45); background:rgba(199,106,112,.12); }
 
 html.dark .portfolio-fundo-card { border-color: rgba(199, 106, 112, .28); background: rgba(199, 106, 112, .08); }
 html.dark .portfolio-fundo-icone { color: #e6a0a4; background: rgba(199, 106, 112, .16); }
 html.dark .portfolio-subclasse-campo select { background: rgba(22, 25, 31, .9); border-color: rgba(199, 106, 112, .35); }
 html.dark .portfolio-subclasse-fixa { color: #e7a8ac; background: rgba(199, 106, 112, .14); }
+html.dark .portfolio-subclasse-aviso { border-color:rgba(199,106,112,.32); background:rgba(199,106,112,.10); color:#f0b7ba; }
+html.dark .portfolio-subclasse-aviso i { color:#f0b7ba; background:rgba(199,106,112,.18); }
 
 @media (max-width: 1100px) {
     .portfolio-tabela th:nth-child(6), .portfolio-tabela td:nth-child(6),

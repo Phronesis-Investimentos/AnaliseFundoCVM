@@ -134,13 +134,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 <button type="button" class="portfolio-remover-fundo" title="Remover fundo" data-idx="${idx}"><i class="ph ph-x"></i></button>
             `;
             const seletor = chip.querySelector('[data-subclasse-idx]');
-            if (seletor) seletor.addEventListener('change', () => { fundosSelecionados[idx].id_subclasse = seletor.value || null; });
+            if (seletor) seletor.addEventListener('change', () => { fundosSelecionados[idx].id_subclasse = seletor.value || null; renderFundosChips(); });
             chip.querySelector('[data-idx]').addEventListener('click', () => {
                 fundosSelecionados.splice(idx, 1);
                 renderFundosChips();
             });
             divFundos.appendChild(chip);
         });
+        const pendentes = fundosSelecionados.filter(f => f.subclasses?.length > 1 && !f.id_subclasse);
+        if (pendentes.length) {
+            const aviso = document.createElement('div');
+            aviso.className = 'portfolio-subclasse-aviso';
+            aviso.innerHTML = `<i class="ph ph-info"></i><div><strong>Subclasse pendente</strong><span>Escolha a série de cotas antes de comparar os fundos.</span></div>`;
+            divFundos.appendChild(aviso);
+        }
     };
 
     const fetchBuscaComp = debounce(async (termo) => {
@@ -350,7 +357,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         if (fundosSelecionados.some(f => f.subclasses?.length > 1 && !f.id_subclasse)) {
-            alert('Selecione a subclasse dos fundos pendentes antes de comparar.');
+            divFundos.querySelector('.portfolio-subclasse-aviso')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 

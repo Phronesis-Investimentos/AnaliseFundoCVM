@@ -1,9 +1,7 @@
 import os
-import threading
 
 import pandas as pd
-from flask import Flask, render_template, request, jsonify, send_file, current_app
-from werkzeug.exceptions import HTTPException
+from flask import Flask, render_template, request, jsonify, send_file
 from waitress import serve
 
 from services.nome_fundo import carregar_depara_fundos
@@ -37,32 +35,8 @@ from utils.validacoes import (
 
 app = Flask(__name__)
 
-
-@app.errorhandler(Exception)
-def tratar_erro_na_api(erro):
-    """Mantém os endpoints JSON mesmo quando ocorre uma falha não prevista."""
-    if isinstance(erro, HTTPException):
-        return erro
-    current_app.logger.exception("Erro não tratado em %s", request.path)
-    if request.path.startswith("/api/"):
-        return jsonify({"erro": "Não foi possível concluir a consulta. Verifique os logs do servidor."}), 500
-    return "Erro interno do servidor.", 500
-
-# O servidor deve iniciar mesmo se o cadastro da CVM estiver lento ou fora do ar.
-# A lista é preenchida em segundo plano e cada requisição passa a usar o cadastro
-# assim que o carregamento terminar.
-df_fundos = pd.DataFrame(columns=["CNPJ_FUNDO", "DENOM_SOCIAL"])
-
-
-def _carregar_fundos_em_segundo_plano():
-    global df_fundos
-    cadastro = carregar_depara_fundos()
-    if not cadastro.empty:
-        df_fundos = cadastro
-        print(f"Cadastro de classes pronto: {len(df_fundos)} fundos.")
-
-
-threading.Thread(target=_carregar_fundos_em_segundo_plano, daemon=True).start()
+# Carrega uma vez quando o Flask inicia
+df_fundos = carregar_depara_fundos()
 
 # Chaves dos 5 períodos usados no ranking (mesmas do fundos_service)
 CHAVES_PERIODOS_RANKING = ["12m", "24m", "36m", "48m", "60m"]
@@ -474,15 +448,19 @@ def exportar_portfolio_excel():
     }
     """
     dados = request.get_json(silent=True) or {}
+    cenarios = dados.get("cenarios")
     fundos = dados.get("fundos")
 
-    if not fundos:
+    if not cenarios and not fundos:
         return jsonify({"erro": "Nenhum fundo informado para exportação"}), 400
+
+    if cenarios:
+        fundos = cenarios[0].get("fundos", [])
 
     buffer = gerar_excel_portfolio(
         fundos=fundos,
         correlacao=dados.get("correlacao"),
-        covariancia=dados.get("covariancia"),
+        cenarios=cenarios,
         data_referencia=dados.get("data_referencia"),
     )
 
@@ -549,4 +527,5 @@ def download_exportacao_ranking_excel(job_id):
 
 
 if __name__ == "__main__":
-    serve(app, host="0.0.0.0", port=int(os.environ.get("PORT", "6767")))
+    porta = int(os.environ.get("PORT", "6767"))
+    serve(app, host="0.0.0.0", port=porta)

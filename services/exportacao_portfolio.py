@@ -39,9 +39,10 @@ def _montar_aba_portfolio(
     wb: Workbook,
     fundos: list[dict],
     data_referencia: str | None,
+    nome_aba: str = "Portfólio",
 ) -> None:
     ws = wb.active
-    ws.title = "Portfólio"
+    ws.title = nome_aba[:31]
 
     fonte_padrao = "Arial"
 
@@ -174,11 +175,11 @@ def _montar_aba_portfolio(
     _autofit_colunas(ws)
 
 
-def _montar_aba_correlacao(wb: Workbook, fundos: list[dict], correlacao: dict) -> None:
+def _montar_aba_correlacao(wb: Workbook, fundos: list[dict], correlacao: dict, nome_aba: str = "Correlação") -> None:
     if not fundos or not correlacao:
         return
 
-    ws = wb.create_sheet("Correlação")
+    ws = wb.create_sheet(nome_aba[:31])
     fonte_padrao = "Arial"
 
     ws["A1"] = "Matriz de Correlação (retornos diários, 36 meses)"
@@ -339,6 +340,7 @@ def gerar_excel_portfolio(
     correlacao: dict | None = None,
     covariancia: dict | None = None,
     data_referencia: str | None = None,
+    cenarios: list[dict] | None = None,
 ) -> io.BytesIO:
     """
     Gera um arquivo .xlsx com a composição do portfólio (CNPJ, nome,
@@ -367,9 +369,18 @@ def gerar_excel_portfolio(
     """
     wb = Workbook()
 
-    _montar_aba_portfolio(wb, fundos, data_referencia)
-    _montar_aba_correlacao(wb, fundos, correlacao or {})
-    _montar_aba_covariancia(wb, fundos, covariancia or {})
+    cenarios = cenarios or [{"nome": "Portfólio 1", "fundos": fundos}]
+    for indice, cenario in enumerate(cenarios, start=1):
+        if indice > 1:
+            aba_cenario = wb.create_sheet()
+            wb.active = wb.index(aba_cenario)
+        nome = str(cenario.get("nome") or f"Cenário {indice}")
+        fundos_cenario = cenario.get("fundos") or fundos
+        _montar_aba_portfolio(wb, fundos_cenario, data_referencia, nome_aba=nome)
+
+    # Correlação independe dos pesos: uma única aba basta para todos os
+    # portfólios exportados.
+    _montar_aba_correlacao(wb, fundos, correlacao or {}, nome_aba="Correlação")
 
     buffer = io.BytesIO()
     wb.save(buffer)

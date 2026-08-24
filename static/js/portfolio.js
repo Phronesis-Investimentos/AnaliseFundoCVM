@@ -207,7 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (seletor) {
                 seletor.addEventListener('change', () => {
                     fundosPortfolio[idx].id_subclasse = seletor.value || null;
-                    atualizarEstadoGerarPortfolio();
+                    renderChipsFundos();
                 });
             }
             chip.querySelector('[data-idx]').addEventListener('click', () => {
@@ -216,6 +216,14 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             divFundosAdicionados.appendChild(chip);
         });
+
+        const pendentes = fundosPortfolio.filter(f => f.subclasses && f.subclasses.length > 1 && !f.id_subclasse);
+        if (pendentes.length) {
+            const aviso = document.createElement('div');
+            aviso.className = 'portfolio-subclasse-aviso';
+            aviso.innerHTML = `<i class="ph ph-info"></i><div><strong>Escolha a subclasse para continuar</strong><span>${pendentes.length === 1 ? 'Este fundo possui mais de uma série de cotas.' : `${pendentes.length} fundos possuem mais de uma série de cotas.`} Os cálculos só usarão a opção selecionada.</span></div>`;
+            divFundosAdicionados.appendChild(aviso);
+        }
 
         atualizarEstadoGerarPortfolio();
         btnAdicionarCarteira.disabled = fundosPortfolio.length === 0;
@@ -445,6 +453,14 @@ document.addEventListener("DOMContentLoaded", () => {
             fundosPortfolio = fundosEncontrados;
             renderChipsFundos();
 
+            // Carteiras salvas antes da seleção de subclasses podem exigir
+            // uma escolha do usuário. Mostra o aviso integrado e não chama
+            // a API enquanto houver uma série pendente.
+            if (fundosPortfolio.some(f => f.subclasses?.length > 1 && !f.id_subclasse)) {
+                divFundosAdicionados.querySelector('.portfolio-subclasse-aviso')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
+
             // Gera o portfólio direto, com a data de hoje (informações
             // mais recentes), igual clicar em "Gerar Portfólio".
             const resultado = await chamarApiPortfolio(fundosPortfolio, inputDataReferencia.value);
@@ -452,7 +468,12 @@ document.addEventListener("DOMContentLoaded", () => {
             renderizarPortfolio(resultado);
         } catch (erro) {
             console.error(erro);
-            alert(erro.message || 'Erro ao carregar a carteira.');
+            if ((erro.message || '').startsWith('Selecione uma subclasse')) {
+                renderChipsFundos();
+                divFundosAdicionados.querySelector('.portfolio-subclasse-aviso')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                alert(erro.message || 'Erro ao carregar a carteira.');
+            }
         } finally {
             hideLoader();
         }
@@ -474,11 +495,49 @@ document.addEventListener("DOMContentLoaded", () => {
     const somaPesosValor = document.getElementById('portfolio_soma_pesos_valor');
     const btnDistribuirIgual = document.getElementById('btn_distribuir_pesos_igual');
     const btnExportarPortfolio = document.getElementById('btn_exportar_portfolio');
+    const areaCenarios = document.getElementById('portfolio_cenarios');
 
     // Guarda o último resultado vindo da API (fundos + correlação) para
     // poder re-renderizar (ex: ao remover um fundo da tabela) sem
     // precisar chamar a API de novo.
     let ultimoResultado = { fundos: [], correlacao: {} };
+    let cenariosPortfolio = [];
+    let indiceCenarioAtivo = 0;
+
+    function salvarPesosCenarioAtual() {
+        if (!cenariosPortfolio[indiceCenarioAtivo]) return;
+        const pesos = {};
+        tabelaBody.querySelectorAll('input[data-peso-cnpj]').forEach(input => {
+            pesos[input.dataset.pesoCnpj] = parseFloat(input.value) || 0;
+        });
+        cenariosPortfolio[indiceCenarioAtivo].pesos = pesos;
+    }
+
+    function renderizarCenarios() {
+        if (!areaCenarios) return;
+        areaCenarios.innerHTML = cenariosPortfolio.map((cenario, indice) =>
+            `<span class="portfolio-cenario-tab ${indice === indiceCenarioAtivo ? 'ativo' : ''}"><button type="button" data-cenario="${indice}">${cenario.nome}</button>${cenariosPortfolio.length > 1 ? `<button type="button" class="portfolio-cenario-excluir" title="Excluir ${cenario.nome}" data-excluir-cenario="${indice}"><i class="ph ph-x"></i></button>` : ''}</span>`
+        ).join('') + `<button type="button" class="portfolio-cenario-adicionar" title="Duplicar pesos em novo cenário" id="btn_novo_cenario"><i class="ph ph-plus"></i></button>`;
+        areaCenarios.querySelectorAll('[data-cenario]').forEach(botao => botao.addEventListener('click', () => {
+            salvarPesosCenarioAtual();
+            indiceCenarioAtivo = Number(botao.dataset.cenario);
+            renderizarPortfolio(ultimoResultado);
+        }));
+        areaCenarios.querySelectorAll('[data-excluir-cenario]').forEach(botao => botao.addEventListener('click', () => {
+            const indice = Number(botao.dataset.excluirCenario);
+            salvarPesosCenarioAtual();
+            cenariosPortfolio.splice(indice, 1);
+            if (indiceCenarioAtivo >= cenariosPortfolio.length) indiceCenarioAtivo = cenariosPortfolio.length - 1;
+            if (indice < indiceCenarioAtivo) indiceCenarioAtivo -= 1;
+            renderizarPortfolio(ultimoResultado);
+        }));
+        document.getElementById('btn_novo_cenario').addEventListener('click', () => {
+            salvarPesosCenarioAtual();
+            cenariosPortfolio.push({ nome: `Portfólio ${cenariosPortfolio.length + 1}`, pesos: { ...cenariosPortfolio[indiceCenarioAtivo].pesos } });
+            indiceCenarioAtivo = cenariosPortfolio.length - 1;
+            renderizarPortfolio(ultimoResultado);
+        });
+    }
 
     async function chamarApiPortfolio(fundos, dataReferencia) {
         const res = await fetch('/api/portfolio/gerar', {
@@ -539,6 +598,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         atualizarMatrizCovariancia();
         atualizarColunasAttribution();
+        salvarPesosCenarioAtual();
 
         return fechou100;
     }
@@ -816,13 +876,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
         showLoader();
         try {
+            salvarPesosCenarioAtual();
             const res = await fetch('/api/portfolio/exportar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    fundos: coletarFundosComPesoAtual(),
+                    cenarios: cenariosPortfolio.map(cenario => ({
+                        nome: cenario.nome,
+                        fundos: ultimoResultado.fundos.map(fundo => ({
+                            ...fundo,
+                            peso: cenario.pesos[fundo.cnpj] ?? 0,
+                        })),
+                    })),
                     correlacao: ultimoResultado.correlacao,
-                    covariancia: calcularCovarianciaAtual(),
                     data_referencia: inputDataReferencia.value,
                 }),
             });
@@ -881,9 +947,10 @@ document.addEventListener("DOMContentLoaded", () => {
             linha.className = 'border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/[0.02] result-fade-in';
 
             // Última linha recebe o ajuste de arredondamento para fechar 100%
-            const valorPeso = idx === fundosComDados.length - 1
+            const pesoSalvo = cenariosPortfolio[indiceCenarioAtivo]?.pesos?.[fundo.cnpj];
+            const valorPeso = pesoSalvo !== undefined ? Number(pesoSalvo).toFixed(2) : (idx === fundosComDados.length - 1
                 ? (100 - pesoIgual * (fundosComDados.length - 1)).toFixed(2)
-                : pesoIgual.toFixed(2);
+                : pesoIgual.toFixed(2));
 
             linha.innerHTML = `
                 <td class="px-3 py-3 text-gray-800 dark:text-gray-200 portfolio-fundo-coluna">
@@ -976,6 +1043,8 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        if (cenariosPortfolio.length === 0) cenariosPortfolio = [{ nome: 'Portfólio 1', pesos: {} }];
+        renderizarCenarios();
         renderizarTabelaPortfolio(resultado.fundos);
         renderizarMatrizCorrelacao(resultado.fundos, resultado.correlacao);
 
@@ -992,10 +1061,17 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const resultado = await chamarApiPortfolio(fundosPortfolio, inputDataReferencia.value);
             ultimoResultado = resultado;
+            cenariosPortfolio = [];
+            indiceCenarioAtivo = 0;
             renderizarPortfolio(resultado);
         } catch (erro) {
             console.error(erro);
-            alert(erro.message || 'Erro ao gerar o portfólio.');
+            if ((erro.message || '').startsWith('Selecione uma subclasse')) {
+                renderChipsFundos();
+                divFundosAdicionados.querySelector('.portfolio-subclasse-aviso')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                alert(erro.message || 'Erro ao gerar o portfólio.');
+            }
         } finally {
             hideLoader();
         }
