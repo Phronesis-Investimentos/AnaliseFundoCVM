@@ -978,13 +978,21 @@ def carregar_historico_fundos(
 
 
 def listar_subclasses_fundo(cnpj: str, data_referencia: str | None = None) -> list[str]:
-    """Retorna IDs não vazios disponíveis para um fundo, sem alterar o fluxo legado."""
+    """Lista subclasses antes da deduplicação diária usada nos cálculos."""
     fim = pd.Timestamp(data_referencia).normalize() if data_referencia else pd.Timestamp.today().normalize()
     inicio = fim - pd.DateOffset(months=2)
-    df = carregar_historico_fundo(cnpj, inicio.strftime("%Y-%m-%d"), fim.strftime("%Y-%m-%d"))
-    if df.empty or "ID_SUBCLASSE" not in df.columns:
-        return []
-    return sorted({valor for valor in df["ID_SUBCLASSE"].map(normalizar_id_subclasse) if valor is not None})
+    subclasses = set()
+    for mes in pd.date_range(inicio.replace(day=1), fim.replace(day=1), freq="MS"):
+        df = carregar_dataframe(mes.year, mes.month, cnpj)
+        if df.empty or "ID_SUBCLASSE" not in df.columns:
+            continue
+        # Subclasses diferentes podem ter cotas na mesma data. A rotina de
+        # histórico reduz a série a uma linha por dia e não serve como catálogo.
+        subclasses.update(
+            valor for valor in df["ID_SUBCLASSE"].map(normalizar_id_subclasse)
+            if valor is not None
+        )
+    return sorted(subclasses)
 
 
 def carregar_cotas_referencia_fundos(cnpjs, datas_referencia) -> pd.DataFrame:
