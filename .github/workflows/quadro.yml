@@ -1,0 +1,36 @@
+name: Quadro da área de dev
+
+# Toda issue aberta (ou reaberta) neste repositório entra no quadro
+# "Acompanhamento Geral" da organização, já com a área atendida preenchida.
+# O token fica no segredo PROJECT_TOKEN deste repositório (plano gratuito:
+# segredo da organização não chega a repositório privado). Vence em ~set/2027.
+on:
+  issues:
+    types: [opened, reopened, transferred]
+
+permissions: {}
+
+env:
+  PROJETO_URL: https://github.com/orgs/Phronesis-Investimentos/projects/1
+  PROJETO_ID: PVT_kwDOEfUe284Bkjqy
+  CAMPO_AREA: PVTSSF_lADOEfUe284BkjqyzhjT2pA
+  AREA: 0eaf6614 # Operacional - Líquidos
+
+jobs:
+  adicionar:
+    runs-on: ubuntu-latest
+    steps:
+      - id: quadro
+        uses: actions/add-to-project@v2
+        with:
+          project-url: ${{ env.PROJETO_URL }}
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+
+      - name: Preenche a área atendida
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          ITEM: ${{ steps.quadro.outputs.itemId }}
+        run: |
+          gh api graphql \
+            -f query='mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){ updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){ clientMutationId } }' \
+            -f p="$PROJETO_ID" -f i="$ITEM" -f f="$CAMPO_AREA" -f o="$AREA"
