@@ -26,7 +26,9 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Abra `http://127.0.0.1:5000` no navegador.
+Abra `http://127.0.0.1:6767` no navegador. Mantenha o terminal aberto enquanto usa o projeto.
+
+Nas próximas execuções, inicie com `.\start_production.ps1`, usando o ambiente virtual já preparado. Para configurar a execução como serviço do Windows, consulte [README_VM.md](README_VM.md).
 
 ## Estrutura principal
 
