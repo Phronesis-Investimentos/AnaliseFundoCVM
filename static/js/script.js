@@ -86,6 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let fundosSelecionados = [];
     let periodosSelecionados = [];
+    let ultimoComparativoData = null;
 
     const inputBuscaComp = document.getElementById('busca_fundo_comparacao');
     const listaComp = document.getElementById('lista_fundos_comparacao');
@@ -444,11 +445,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 subtitulo.textContent = `${data.fundos.length} fundo(s) · ${data.periodos.length} período(s)`;
             }
 
-            // Comparação não tem exportação para Excel — esconde o botão
-            // (ele só faz sentido para o ranking, com os 5 períodos fixos).
+            // Guarda exatamente os resultados exibidos para a exportação.
+            ultimoComparativoData = data;
             ultimoRankingData = null;
-            document.getElementById('btn_exportar_excel').classList.add('hidden');
-            document.getElementById('btn_exportar_excel').classList.remove('flex');
+            document.getElementById('btn_exportar_excel').classList.remove('hidden');
+            document.getElementById('btn_exportar_excel').classList.add('flex');
 
             abrirModalResultado();
 
@@ -560,6 +561,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         dataReferenciaRankingAtual = data.data_referencia;
         ultimoRankingData = data;
+        ultimoComparativoData = null;
 
         data.fundos.forEach((fundo, indice) => {
             const linha = document.createElement('tr');
@@ -750,6 +752,42 @@ document.addEventListener("DOMContentLoaded", () => {
     // Fluxo: inicia o job no backend -> faz polling do status a cada
     // 700ms -> quando concluído, dispara o download e fecha o indicador.
     btnExportarExcel.addEventListener('click', async () => {
+        if (ultimoComparativoData) {
+            showLoader();
+            try {
+                const resposta = await fetch('/api/fundos/comparar/exportar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ultimoComparativoData),
+                });
+
+                if (!resposta.ok) {
+                    const erro = await resposta.json().catch(() => ({}));
+                    throw new Error(erro.erro || 'Não foi possível exportar o comparativo.');
+                }
+
+                const arquivo = await resposta.blob();
+                const url = URL.createObjectURL(arquivo);
+                const link = document.createElement('a');
+                const datasFinais = ultimoComparativoData.periodos
+                    .map(periodo => periodo.data_final)
+                    .filter(Boolean);
+                const dataArquivo = datasFinais.sort().at(-1) || 'atual';
+                link.href = url;
+                link.download = `comparativo_fundos_${dataArquivo}.xlsx`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
+            } catch (erro) {
+                alert(erro.message || 'Erro ao exportar o comparativo.');
+                console.error(erro);
+            } finally {
+                hideLoader();
+            }
+            return;
+        }
+
         if (!ultimoRankingData) return;
 
         try {

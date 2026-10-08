@@ -19,6 +19,7 @@ from services.exportacao_service import (
 from services.portfolio import portfolio as calcular_portfolio
 from services.cvm import listar_subclasses_fundo, normalizar_id_subclasse
 from services.exportacao_portfolio import gerar_excel_portfolio
+from services.exportacao_comparacao import gerar_excel_comparacao
 from services.carteira_service import (
     salvar_carteira,
     listar_carteiras,
@@ -159,6 +160,33 @@ def comparar_fundos():
     )
     
     return jsonify(resultado)
+
+
+@app.post("/api/fundos/comparar/exportar")
+def exportar_comparacao_excel():
+    """Exporta os dados já calculados e exibidos na comparação."""
+    dados = request.get_json(silent=True) or {}
+    fundos = dados.get("fundos")
+    periodos = dados.get("periodos")
+
+    try:
+        buffer = gerar_excel_comparacao(fundos or [], periodos or [])
+    except (ValueError, TypeError) as erro:
+        return jsonify({"erro": str(erro)}), 400
+
+    datas_finais = [
+        str(periodo.get("data_final"))
+        for periodo in (periodos or [])
+        if periodo.get("data_final")
+    ]
+    data_arquivo = max(datas_finais) if datas_finais else obter_data_referencia().strftime("%Y-%m-%d")
+
+    return send_file(
+        buffer,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"comparativo_fundos_{data_arquivo}.xlsx",
+    )
 
 
 @app.get("/api/fundos/ranking")
@@ -506,7 +534,7 @@ def status_exportacao_ranking_excel(job_id):
     """Retorna o progresso atual de um job de exportação (para polling)."""
     status = obter_status_exportacao(job_id)
     if status is None:
-        return jsonify({"erro": "Exportação não encontrada"}), 404
+        return jsonify({"erro": "Exportação não encontrada"}    ), 404
 
     return jsonify(status)
 
