@@ -20,6 +20,8 @@ from services.portfolio import portfolio as calcular_portfolio
 from services.cvm import listar_subclasses_fundo, normalizar_id_subclasse
 from services.exportacao_portfolio import gerar_excel_portfolio
 from services.exportacao_comparacao import gerar_excel_comparacao
+from services.composicao_service import buscar_composicoes, normalizar_cnpj
+from services.exportacao_composicao import gerar_excel_composicao, gerar_pdf_composicao
 from services.carteira_service import (
     salvar_carteira,
     listar_carteiras,
@@ -33,6 +35,7 @@ from utils.validacoes import (
     obter_ultimo_mes_completo,
     obter_data_referencia,
 )
+from utils.formatadores import formatar_cnpj
 
 app = Flask(__name__)
 
@@ -56,6 +59,102 @@ def comparar():
 @app.route("/portfolio")
 def portfolio():
     return render_template("portfolio.html")
+
+
+@app.route("/composicao")
+def composicao():
+    return render_template("composicao.html")
+
+
+@app.get("/api/composicao/buscar-fundos")
+def buscar_fundos_composicao():
+    termo = request.args.get("busca", "").strip()
+    if len(termo) < 2:
+        return jsonify([])
+    termo_cnpj = normalizar_cnpj(termo)
+    filtro_nome = df_fundos["DENOM_SOCIAL"].astype(str).str.contains(termo, case=False, na=False, regex=False)
+    filtro_cnpj = df_fundos["CNPJ_FUNDO"].astype(str).map(normalizar_cnpj).str.contains(termo_cnpj, na=False) if termo_cnpj else False
+    encontrados = df_fundos[filtro_nome | filtro_cnpj].drop_duplicates("CNPJ_FUNDO").head(10)
+    return jsonify([
+        {"cnpj": linha["CNPJ_FUNDO"], "nome": linha["DENOM_SOCIAL"]}
+        for _, linha in encontrados.iterrows()
+    ])
+
+
+def _resolver_fundos_composicao(entradas):
+    """Resolve CNPJs diretamente e nomes usando o cadastro de fundos carregado pelo app."""
+    if isinstance(entradas, str):
+        entradas = entradas.replace(";", "\n").replace(",", "\n").splitlines()
+    if not isinstance(entradas, list) or not entradas:
+        raise ValueError("Informe pelo menos um CNPJ ou nome de fundo")
+    resolvidos = []
+    vistos = set()
+    for entrada in entradas:
+        if isinstance(entrada, dict):
+            valor = str(entrada.get("cnpj") or entrada.get("nome") or "").strip()
+        else:
+            valor = str(entrada or "").strip()
+        if not valor:
+            continue
+        chave = normalizar_cnpj(valor)
+        if len(chave) == 14:
+            encontrado = df_fundos[df_fundos["CNPJ_FUNDO"].map(normalizar_cnpj) == chave]
+            cnpj = encontrado.iloc[0]["CNPJ_FUNDO"] if not encontrado.empty else formatar_cnpj(chave)
+            nome = encontrado.iloc[0]["DENOM_SOCIAL"] if not encontrado.empty else valor
+        else:
+            termo = " ".join(valor.casefold().split())
+            nomes_normalizados = df_fundos["DENOM_SOCIAL"].astype(str).str.casefold().str.replace(r"\s+", " ", regex=True)
+            exatos = df_fundos[nomes_normalizados == termo]
+            encontrados = exatos if not exatos.empty else df_fundos[nomes_normalizados.str.contains(termo, regex=False, na=False)]
+            encontrados = encontrados.drop_duplicates("CNPJ_FUNDO")
+            if encontrados.empty:
+                raise ValueError(f'Não encontrei um fundo para "{valor}". Use uma sugestão da busca ou informe o CNPJ.')
+            if len(encontrados) > 1:
+                opcoes = "; ".join(f"{r['DENOM_SOCIAL']} ({r['CNPJ_FUNDO']})" for _, r in encontrados.head(4).iterrows())
+                raise ValueError(f'A busca por "{valor}" encontrou mais de um fundo. Refine o nome: {opcoes}')
+            registro = encontrados.iloc[0]
+            cnpj, nome = registro["CNPJ_FUNDO"], registro["DENOM_SOCIAL"]
+        chave = normalizar_cnpj(cnpj)
+        if chave and chave not in vistos:
+            vistos.add(chave)
+            resolvidos.append({"cnpj": cnpj, "nome": nome})
+    if not resolvidos:
+        raise ValueError("Informe pelo menos um CNPJ ou nome de fundo")
+    return resolvidos
+
+
+@app.post("/api/composicao/buscar")
+def obter_composicao_fundos():
+    dados = request.get_json(silent=True) or {}
+    try:
+        fundos = _resolver_fundos_composicao(dados.get("fundos", []))
+        resultados = buscar_composicoes(fundos)
+    except (ValueError, TypeError) as erro:
+        return jsonify({"erro": str(erro)}), 400
+    except Exception as erro:
+        app.logger.exception("Erro ao consultar a composição de fundos na CVM")
+        return jsonify({"erro": f"Não foi possível consultar os dados da CVM: {erro}"}), 502
+    return jsonify({"fundos": resultados})
+
+
+@app.post("/api/composicao/exportar/excel")
+def exportar_composicao_excel():
+    dados = request.get_json(silent=True) or {}
+    try:
+        buffer = gerar_excel_composicao(dados.get("fundos") or [])
+    except (ValueError, TypeError) as erro:
+        return jsonify({"erro": str(erro)}), 400
+    return send_file(buffer, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="composicao_fundos_cvm.xlsx")
+
+
+@app.post("/api/composicao/exportar/pdf")
+def exportar_composicao_pdf():
+    dados = request.get_json(silent=True) or {}
+    try:
+        buffer = gerar_pdf_composicao(dados.get("fundos") or [])
+    except (ValueError, TypeError) as erro:
+        return jsonify({"erro": str(erro)}), 400
+    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name="composicao_fundos_cvm.pdf")
 
 
 @app.route("/api/fundos")

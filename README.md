@@ -7,6 +7,7 @@ Aplicação Flask para pesquisar fundos da CVM, comparar rentabilidade e volatil
 - Comparação de fundos em períodos personalizados, incluindo “Desde o Início”.
 - Ranking de fundos para 12, 24, 36, 48 e 60 meses.
 - Portfólio com rentabilidade, volatilidade, correlação, covariância, *Risk Attribution* e *Attribution*.
+- Composição de fundos: pesquisa por nome ou CNPJ, com PL da mesma competência, percentual de cada posição sobre o PL, percentual PL/posições - 1, e exportação para PDF e Excel.
 - Carteiras salvas em `data/carteiras.json`.
 - Exportação de ranking e portfólio para `.xlsx`.
 - Cache local dos arquivos diários da CVM em `cache/`.
@@ -36,6 +37,7 @@ Nas próximas execuções, inicie com `.\start_production.ps1`, usando o ambient
 app.py                         Rotas Flask e integração entre interface e serviços
 services/cvm.py                Download, cache e leitura dos históricos da CVM
 services/fundos_service.py     Comparação, variação e ranking
+services/composicao_service.py Busca das carteiras públicas de cotas de fundos da CVM
 services/portfolio.py          Métricas e matrizes do portfólio
 services/exportacao_*.py       Geração dos arquivos Excel
 services/carteira_service.py   Persistência das carteiras salvas
@@ -53,6 +55,9 @@ data/carteiras.json            Carteiras salvas
 | `GET` | `/api/fundos/subclasses?cnpj=...` | Lista subclasses disponíveis |
 | `POST` | `/api/fundos/comparar` | Compara fundos e períodos |
 | `GET` | `/api/fundos/ranking` | Gera ranking |
+| `POST` | `/api/composicao/buscar` | Consulta a composição mais recente divulgada dos fundos |
+| `POST` | `/api/composicao/exportar/pdf` | Exporta as composições consultadas para PDF |
+| `POST` | `/api/composicao/exportar/excel` | Exporta as composições consultadas para Excel |
 | `POST` | `/api/portfolio/gerar` | Calcula o portfólio |
 | `POST` | `/api/portfolio/exportar` | Exporta o portfólio para Excel |
 | `GET/POST` | `/api/carteiras` | Lista ou salva carteiras |

@@ -7,6 +7,7 @@ __pycache__/
 .vscode/
 cache/elegiveis_*.parquet
 cache/*.parquet
+cache/cda/
 
 # Dados persistentes locais
 data/carteiras.json
