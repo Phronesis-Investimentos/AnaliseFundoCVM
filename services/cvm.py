@@ -1,9 +1,11 @@
 import os
 import io
+import json
 import zipfile
+from datetime import date, datetime, timedelta
+from threading import Lock
 import requests
 import pandas as pd
-from datetime import datetime
 
 URL_BASE = "https://dados.cvm.gov.br/dados/FI/DOC/INF_DIARIO/DADOS"
 URL_BASE_HIST = f"{URL_BASE}/HIST"
@@ -13,6 +15,84 @@ session = requests.Session()
 session.trust_env = False
 
 COLUNAS_HISTORICO = ["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA", "ID_SUBCLASSE"]
+CAMINHO_ATUALIZACOES_COTAS = "cache/atualizacoes_cotas.json"
+_lock_atualizacao_cotas = Lock()
+_ultima_atualizacao_cotas: dict[str, str] | None = None
+
+
+def _hoje_local() -> date:
+    return date.today()
+
+
+def _data_limite_cotas() -> date:
+    """D-1; em fins de semana, usa a sexta-feira anterior."""
+    limite = _hoje_local() - timedelta(days=1)
+    while limite.weekday() >= 5:
+        limite -= timedelta(days=1)
+    return limite
+
+
+def _carregar_datas_atualizacao() -> dict[str, str]:
+    global _ultima_atualizacao_cotas
+    if _ultima_atualizacao_cotas is None:
+        try:
+            with open(CAMINHO_ATUALIZACOES_COTAS, encoding="utf-8") as arquivo:
+                dados = json.load(arquivo)
+            _ultima_atualizacao_cotas = dados if isinstance(dados, dict) else {}
+        except (OSError, ValueError):
+            _ultima_atualizacao_cotas = {}
+    return _ultima_atualizacao_cotas
+
+
+def _registrar_atualizacao(ano: int, mes: int, hoje: date) -> None:
+    datas = _carregar_datas_atualizacao()
+    datas[f"{ano}{mes:02d}"] = hoje.isoformat()
+    os.makedirs("cache", exist_ok=True)
+    temporario = f"{CAMINHO_ATUALIZACOES_COTAS}.tmp"
+    try:
+        with open(temporario, "w", encoding="utf-8") as arquivo:
+            json.dump(datas, arquivo, ensure_ascii=False, indent=2)
+        os.replace(temporario, CAMINHO_ATUALIZACOES_COTAS)
+    except OSError as erro:
+        print(f"Não foi possível registrar a atualização das cotas: {erro}")
+
+
+def _atualizar_mes_se_necessario(ano: int, mes: int) -> bool:
+    """Atualiza o mês de D-1 uma vez ao dia e o mês anterior uma vez no mês.
+
+    Retorna True se houve tentativa, para não repetir o download na mesma leitura.
+    """
+    hoje = _hoje_local()
+    limite = _data_limite_cotas()
+    mes_limite = (limite.year, limite.month)
+    # Na virada, D-1 pode ainda pertencer ao mês passado. Nesse caso ele já
+    # é o mês a atualizar diariamente; não rebaixa também o retrasado.
+    primeiro_dia_mes = hoje.replace(day=1)
+    fim_mes_anterior = primeiro_dia_mes - timedelta(days=1)
+    mes_anterior = (fim_mes_anterior.year, fim_mes_anterior.month)
+    if mes_limite != (hoje.year, hoje.month):
+        mes_anterior = None
+    alvo = (ano, mes)
+    if alvo not in (mes_limite, mes_anterior) or ano <= 2020:
+        return False
+
+    with _lock_atualizacao_cotas:
+        chave = f"{ano}{mes:02d}"
+        ultima = _carregar_datas_atualizacao().get(chave)
+        cache_valido = os.path.exists(_caminho_cache_mes(ano, mes))
+        if cache_valido:
+            if alvo == mes_limite and ultima == hoje.isoformat():
+                return False
+            if alvo == mes_anterior and ultima and ultima[:7] == hoje.isoformat()[:7]:
+                return False
+
+        try:
+            _carregar_dados_recentes(ano, mes, cnpj="", raise_on_error=True)
+        except (requests.RequestException, OSError, ValueError, zipfile.BadZipFile) as erro:
+            print(f"Não foi possível atualizar as cotas de {ano}-{mes:02d}: {erro}")
+        else:
+            _registrar_atualizacao(ano, mes, hoje)
+        return True
 
 
 def normalizar_id_subclasse(valor) -> str | None:
@@ -41,6 +121,13 @@ def _caminho_cache_mes(ano: int, mes: int) -> str:
 def _caminho_cache_ano(ano: int) -> str:
     """Retorna o caminho do cache para um ano inteiro (HIST)"""
     return f"cache/hist_{ano}.parquet"
+
+
+def _limitar_cotas_a_d1(df: pd.DataFrame) -> pd.DataFrame:
+    """Nunca entrega uma cota posterior à data de referência automática."""
+    if df.empty:
+        return df
+    return df[pd.to_datetime(df["DT_COMPTC"]) <= pd.Timestamp(_data_limite_cotas())]
 
 
 def _processar_csv(csv_file) -> pd.DataFrame:
@@ -118,6 +205,7 @@ def carregar_dataframe_mes_completo(ano: int, mes: int) -> pd.DataFrame:
     Esta função é usada em operações em lote, como o ranking. Assim, cada
     arquivo mensal é lido uma vez, em vez de uma vez para cada fundo.
     """
+    tentou_atualizar = _atualizar_mes_se_necessario(ano, mes)
     caminho_cache = _caminho_cache_mes(ano, mes)
     if os.path.exists(caminho_cache):
         print(f"Lendo do cache: {ano}-{mes:02d}")
@@ -125,18 +213,18 @@ def carregar_dataframe_mes_completo(ano: int, mes: int) -> pd.DataFrame:
         # Caches criados antes deste ajuste não têm ID_SUBCLASSE e não podem
         # ser usados em cálculos que precisem separar subclasses.
         if "ID_SUBCLASSE" in df_cache.columns:
-            return df_cache
+            return _limitar_cotas_a_d1(df_cache)
 
     if ano <= 2020:
         # A função histórica também materializa o cache mensal.
         _carregar_dados_historicos(ano, mes, cnpj="")
-    else:
+    elif not tentou_atualizar:
         _carregar_dados_recentes(ano, mes, cnpj="")
 
     if os.path.exists(caminho_cache):
         df_atualizado = pd.read_parquet(caminho_cache)
         if "ID_SUBCLASSE" in df_atualizado.columns:
-            return df_atualizado
+            return _limitar_cotas_a_d1(df_atualizado)
         # Falha de rede não pode fazer o sistema voltar a usar uma série
         # legada e potencialmente agregada. Um cache sem a coluna só volta a
         # ser aceito após ser refeito pelo leitor atual.
@@ -155,9 +243,14 @@ def carregar_fundos_elegiveis_por_cotistas(
     O arquivo de elegibilidade é guardado separadamente porque os caches de
     cotas armazenam somente data e valor da cota, sem a coluna ``NR_COTST``.
     """
+    _atualizar_mes_se_necessario(ano, mes)
     caminho_cache = f"cache/elegiveis_{ano}{mes:02d}.parquet"
+    caminho_cotas = _caminho_cache_mes(ano, mes)
     if os.path.exists(caminho_cache):
-        return pd.read_parquet(caminho_cache)
+        # A elegibilidade criada antes do fechamento do mês também envelhece.
+        if (not os.path.exists(caminho_cotas) or
+                os.path.getmtime(caminho_cache) >= os.path.getmtime(caminho_cotas)):
+            return pd.read_parquet(caminho_cache)
 
     arquivo = f"inf_diario_fi_{ano}{mes:02d}.zip"
     try:
@@ -165,6 +258,8 @@ def carregar_fundos_elegiveis_por_cotistas(
         response.raise_for_status()
     except requests.RequestException as erro:
         print(f"Erro ao baixar elegibilidade de {ano}-{mes:02d}: {erro}")
+        if os.path.exists(caminho_cache):
+            return pd.read_parquet(caminho_cache)
         return pd.DataFrame(columns=["CNPJ_FUNDO", "NR_COTST"])
 
     with zipfile.ZipFile(io.BytesIO(response.content)) as zip_file:
@@ -205,7 +300,9 @@ def carregar_fundos_elegiveis_por_cotistas(
     return elegiveis
 
 
-def _carregar_dados_recentes(ano: int, mes: int, cnpj: str) -> pd.DataFrame:
+def _carregar_dados_recentes(
+    ano: int, mes: int, cnpj: str, raise_on_error: bool = False
+) -> pd.DataFrame:
     """
     Carrega dados de anos > 2020 (formato mensal)
     """
@@ -219,6 +316,8 @@ def _carregar_dados_recentes(ano: int, mes: int, cnpj: str) -> pd.DataFrame:
         response = session.get(url, timeout=(10, 300))
         response.raise_for_status()
     except requests.RequestException as e:
+        if raise_on_error:
+            raise
         print(f"Erro ao baixar {arquivo}: {e}")
         return pd.DataFrame(columns=["CNPJ_FUNDO", "DT_COMPTC", "VL_QUOTA"])
     

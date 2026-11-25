@@ -1,6 +1,7 @@
 import pandas as pd
 from services.volatilidade import calcular_volatilidade_periodo
 from services.cvm import carregar_historico_fundo, carregar_historico_fundos, filtrar_por_subclasse
+from utils.validacoes import obter_data_referencia
 
 
 def carregar_historico_36meses(
@@ -16,7 +17,9 @@ def carregar_historico_36meses(
     if not cnpjs:
         return pd.DataFrame(columns=colunas)
 
-    data_final = pd.Timestamp(data_referencia).normalize() if data_referencia is not None else pd.Timestamp.today().normalize()
+    limite = pd.Timestamp(obter_data_referencia()).normalize()
+    data_final = pd.Timestamp(data_referencia).normalize() if data_referencia is not None else limite
+    data_final = min(data_final, limite)
     data_inicial = data_final - pd.DateOffset(months=40)
 
     print(f"Carregando histórico inicial de {data_inicial:%d/%m/%Y} até {data_final:%d/%m/%Y}")

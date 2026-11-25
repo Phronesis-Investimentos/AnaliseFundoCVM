@@ -116,6 +116,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const inputBusca = document.getElementById('busca_fundo_portfolio');
     const listaBusca = document.getElementById('lista_fundos_portfolio');
+    const inputCnpjsLote = document.getElementById('cnpjs_portfolio_lote');
+    const btnAdicionarCnpjs = document.getElementById('btn_adicionar_cnpjs_portfolio');
+    const avisoCnpjs = document.getElementById('aviso_cnpjs_portfolio');
     const divFundosAdicionados = document.getElementById('fundos_portfolio_adicionados');
     const btnGerarPortfolio = document.getElementById('btn_gerar_portfolio');
     const inputDataReferencia = document.getElementById('portfolio_data_referencia');
@@ -134,6 +137,30 @@ document.addEventListener("DOMContentLoaded", () => {
     // Data de referência padrão: mês atual
     inputDataReferencia.value = new Date().toISOString().slice(0, 10);
 
+    const normalizarCnpj = (cnpj) => String(cnpj).replace(/\D/g, '');
+    const formatarCnpj = (cnpj) => cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+
+    const extrairCnpjs = (texto) => {
+        const encontrados = texto.match(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g) || [];
+        return [...new Set(encontrados.map(normalizarCnpj))].map(formatarCnpj);
+    };
+
+    const adicionarFundo = async (item, renderizar = true) => {
+        if (fundosPortfolio.some(f => normalizarCnpj(f.cnpj) === normalizarCnpj(item.CNPJ_FUNDO))) return false;
+        const res = await fetch(`/api/fundos/subclasses?cnpj=${encodeURIComponent(item.CNPJ_FUNDO)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.erro || 'Não foi possível consultar as subclasses.');
+        const subclasses = data.subclasses || [];
+        fundosPortfolio.push({
+            cnpj: item.CNPJ_FUNDO,
+            nome: item.DENOM_SOCIAL,
+            subclasses,
+            id_subclasse: subclasses.length === 1 ? subclasses[0] : null,
+        });
+        if (renderizar) renderChipsFundos();
+        return true;
+    };
+
     const renderDropdown = (items) => {
         listaBusca.innerHTML = '';
         if (items.length === 0) {
@@ -151,25 +178,12 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
 
             li.addEventListener('click', async () => {
-                if (!fundosPortfolio.find(f => f.cnpj === item.CNPJ_FUNDO)) {
-                    try {
-                        const res = await fetch(`/api/fundos/subclasses?cnpj=${encodeURIComponent(item.CNPJ_FUNDO)}`);
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.erro || 'Não foi possível consultar as subclasses.');
-                        const subclasses = data.subclasses || [];
-                        fundosPortfolio.push({
-                            cnpj: item.CNPJ_FUNDO,
-                            nome: item.DENOM_SOCIAL,
-                            subclasses,
-                            // Uma única subclasse não cria etapa adicional.
-                            id_subclasse: subclasses.length === 1 ? subclasses[0] : null,
-                        });
-                    } catch (erro) {
-                        console.error(erro);
-                        alert(erro.message || 'Erro ao adicionar o fundo.');
-                        return;
-                    }
-                    renderChipsFundos();
+                try {
+                    await adicionarFundo(item);
+                } catch (erro) {
+                    console.error(erro);
+                    alert(erro.message || 'Erro ao adicionar o fundo.');
+                    return;
                 }
                 inputBusca.value = '';
                 listaBusca.classList.add('hidden');
@@ -242,13 +256,73 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const res = await fetch(`/api/fundos/buscar?busca=${encodeURIComponent(termo)}`);
             const data = await res.json();
+            if (inputBusca.value !== termo) return;
             renderDropdown(data);
         } catch (e) {
             console.error(e);
         }
     }, 400);
 
-    inputBusca.addEventListener('input', (e) => fetchBuscaFundos(e.target.value));
+    const adicionarCnpjsEmLote = async () => {
+        const cnpjs = extrairCnpjs(inputCnpjsLote.value);
+        if (!cnpjs.length) {
+            avisoCnpjs.textContent = 'Cole ao menos um CNPJ completo (com ou sem pontuação).';
+            return;
+        }
+
+        btnAdicionarCnpjs.disabled = true;
+        inputCnpjsLote.disabled = true;
+        listaBusca.classList.add('hidden');
+        let adicionados = 0;
+        let repetidos = 0;
+        const falhas = [];
+        try {
+            for (const [indice, cnpj] of cnpjs.entries()) {
+                avisoCnpjs.textContent = `Adicionando ${indice + 1} de ${cnpjs.length}...`;
+                if (fundosPortfolio.some(f => normalizarCnpj(f.cnpj) === normalizarCnpj(cnpj))) {
+                    repetidos++;
+                    continue;
+                }
+                try {
+                    const res = await fetch(`/api/fundos/buscar?busca=${encodeURIComponent(cnpj)}`);
+                    if (!res.ok) throw new Error('Não foi possível consultar o cadastro.');
+                    const encontrados = await res.json();
+                    const item = encontrados.find(f => normalizarCnpj(f.CNPJ_FUNDO) === normalizarCnpj(cnpj))
+                        || { CNPJ_FUNDO: cnpj, DENOM_SOCIAL: cnpj };
+                    await adicionarFundo(item, false);
+                    adicionados++;
+                } catch (erro) {
+                    console.error(`Erro ao adicionar ${cnpj}:`, erro);
+                    falhas.push(cnpj);
+                }
+            }
+            renderChipsFundos();
+            avisoCnpjs.textContent = `${adicionados} fundo(s) adicionado(s).${repetidos ? ` ${repetidos} já estava(m) na carteira.` : ''}${falhas.length ? ` Falha em: ${falhas.join(', ')}.` : ''}`;
+            if (!falhas.length) inputCnpjsLote.value = '';
+        } finally {
+            btnAdicionarCnpjs.disabled = false;
+            inputCnpjsLote.disabled = false;
+        }
+    };
+
+    btnAdicionarCnpjs.addEventListener('click', adicionarCnpjsEmLote);
+    inputBusca.addEventListener('paste', (e) => {
+        const texto = e.clipboardData?.getData('text') || '';
+        if (extrairCnpjs(texto).length < 2) return;
+        e.preventDefault();
+        inputBusca.value = '';
+        inputCnpjsLote.value = texto;
+        adicionarCnpjsEmLote();
+    });
+    inputBusca.addEventListener('input', (e) => {
+        if (extrairCnpjs(e.target.value).length > 1) {
+            inputCnpjsLote.value = e.target.value;
+            inputBusca.value = '';
+            adicionarCnpjsEmLote();
+            return;
+        }
+        fetchBuscaFundos(e.target.value);
+    });
 
     document.addEventListener('click', (e) => {
         if (!inputBusca.contains(e.target)) listaBusca.classList.add('hidden');

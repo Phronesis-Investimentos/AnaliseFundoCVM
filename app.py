@@ -374,7 +374,7 @@ def gerar_portfolio():
     Espera um JSON com:
     { "fundos": ["<cnpj1>", "<cnpj2>", ...], "data_referencia": "YYYY-MM-DD" }
 
-    "data_referencia" é opcional (usa hoje se não vier). Os 756 pregões
+    "data_referencia" é opcional (usa D-1 se não vier). Os 756 pregões
     são contados para trás a partir dela; se a data cair num dia não
     útil, o cálculo cai automaticamente para o último pregão disponível
     anterior.
