@@ -57,8 +57,25 @@ def _registrar_atualizacao(ano: int, mes: int, hoje: date) -> None:
         print(f"Não foi possível registrar a atualização das cotas: {erro}")
 
 
+def _cache_mes_incompleto(caminho_cache: str, ano: int, mes: int) -> bool:
+    """Detecta arquivos mensais antigos salvos antes do fim do mês.
+
+    A CVM pode não ter cotas no último dia útil por feriado; a margem de
+    três dias evita baixar novamente um mês completo por essa diferença.
+    """
+    try:
+        datas = pd.read_parquet(caminho_cache, columns=["DT_COMPTC"])["DT_COMPTC"]
+        ultima_cota = pd.to_datetime(datas, errors="coerce").max()
+    except (OSError, ValueError, KeyError):
+        return True
+    if pd.isna(ultima_cota):
+        return True
+    fim_mes = pd.Timestamp(ano, mes, 1) + pd.offsets.BMonthEnd(0)
+    return ultima_cota.normalize() < fim_mes - pd.Timedelta(days=3)
+
+
 def _atualizar_mes_se_necessario(ano: int, mes: int) -> bool:
-    """Atualiza o mês de D-1 uma vez ao dia e o mês anterior uma vez no mês.
+    """Atualiza D-1 e corrige caches recentes salvos antes do fim do mês.
 
     Retorna True se houve tentativa, para não repetir o download na mesma leitura.
     """
@@ -73,13 +90,22 @@ def _atualizar_mes_se_necessario(ano: int, mes: int) -> bool:
     if mes_limite != (hoje.year, hoje.month):
         mes_anterior = None
     alvo = (ano, mes)
-    if alvo not in (mes_limite, mes_anterior) or ano <= 2020:
+    meses_atras = (hoje.year - ano) * 12 + hoje.month - mes
+    mes_recente = 2 <= meses_atras <= 11
+    if (alvo not in (mes_limite, mes_anterior) and not mes_recente) or ano <= 2020:
         return False
 
     with _lock_atualizacao_cotas:
         chave = f"{ano}{mes:02d}"
         ultima = _carregar_datas_atualizacao().get(chave)
-        cache_valido = os.path.exists(_caminho_cache_mes(ano, mes))
+        caminho_cache = _caminho_cache_mes(ano, mes)
+        cache_valido = os.path.exists(caminho_cache)
+        if alvo not in (mes_limite, mes_anterior):
+            if not cache_valido or not _cache_mes_incompleto(caminho_cache, ano, mes):
+                return False
+            if ultima == hoje.isoformat():
+                return False
+            print(f"Cache mensal incompleto: {ano}-{mes:02d}. Atualizando pela CVM.")
         if cache_valido:
             if alvo == mes_limite and ultima == hoje.isoformat():
                 return False
